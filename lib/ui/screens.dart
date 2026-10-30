@@ -9,6 +9,7 @@ import '../main.dart';
 import '../data/note_pdf.dart';
 import '../domain/models.dart';
 import 'scanner.dart';
+import 'application_branding.dart';
 
 void showError(BuildContext context, [String? message]) =>
     ScaffoldMessenger.of(context).showSnackBar(
@@ -72,7 +73,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Icon(Icons.receipt_long, size: 72),
+                    const ApplicationBranding(),
                     const SizedBox(height: 24),
                     Text(
                       'Nota Entrega Mobile',
@@ -174,7 +175,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('Nota Entrega'),
+      title: const ApplicationBranding(compact: true),
+      toolbarHeight: 72,
       actions: [
         IconButton(
           tooltip: 'Cerrar sesión',
