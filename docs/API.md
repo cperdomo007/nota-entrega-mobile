@@ -1,32 +1,42 @@
-# Contrato propuesto del adaptador móvil v1
+# API móvil v1 implementada
 
-**Pendiente de implementación/aprobación en servidor.** Estos endpoints NO se encontraron en la web. No hay despliegue ni migración en esta entrega. El adaptador debe reutilizar servicios/transacciones web contra los mismos datos, sin exponer MySQL a Flutter.
+Código en `backend/src/`. Base HTTPS `/api/mobile/v1/`; MySQL solo en el servidor. Datos JSON camelCase, precios como strings decimales y fechas YYYY-MM-DD. No envolver en SuperJSON/tRPC.
 
-Base HTTPS `/api/mobile/v1/`. JSON UTF-8, camelCase. Autenticación obligatoria `Authorization: Bearer <access_token>` en todas las rutas; validar firma, issuer, audience, expiración y usuario/roles. OIDC Authorization Code + PKCE S256, cliente público Android y redirect registrado. El proveedor debe vincular identidades con users.openId existente mediante un mecanismo aprobado, sin crear asociaciones por email no verificado. No aceptar JWT de la cookie como token móvil por defecto. Sin client_secret embebido.
+## Autenticación
+
+- POST `auth/login`: `{email,password}` → `{accessToken,refreshToken,expiresIn:900,user:{id,email,name,role}}`.
+- POST `auth/refresh`: `{refreshToken}` → misma estructura, rotando access/refresh; los anteriores dejan de funcionar.
+- POST `auth/logout`: `{refreshToken}` → 204, revoca la sesión. Es idempotente.
+- GET `auth/me`: requiere Bearer → `{user}`.
+
+Las cuentas residen en `mobile_users`, separadas de `users` OAuth de la web. Contraseñas de 12–128 caracteres al crearlas; scrypt N=32768,r=8,p=3, salt aleatorio de 16 bytes. Tokens opacos de 32 bytes aleatorios; solo hashes SHA-256 en `mobile_sessions`. Cinco fallos por cuenta bloquean 15 minutos. Respuestas de login uniformes sin revelar si existe la cuenta. Rate limiting por IP (una réplica); bloqueo de cuenta persistente entre réplicas.
+
+Todas las rutas siguientes requieren `Authorization: Bearer <accessToken>`. Se comprueba usuario activo y expiración en cada solicitud, sin reutilizar cookies web.
 
 | Método/ruta | Respuesta |
 | --- | --- |
-| GET dashboard | `{"clients":10,"products":20,"notes":30}` |
-| GET clients?q=&limit=50&offset=0 | `{"items":[{"id":1,"name":"Cliente","rif":"J-1","address":"","phone":"","contact":""}]}` |
-| GET products?q=&limit=50&offset=0 | `{"items":[{"id":1,"name":"Router","barcode":"123","price":"100.25","unit":"UN","hasSerial":true}]}` |
-| GET notes?q=&limit=50&offset=0 | `{"items":[{...cabecera}]}` |
-| GET config | `{"ivaRate":"16.00"}` |
-| GET notes/next-number | `{"noteNumber":"NE-000001"}` (sugerencia) |
-| GET notes/:id | Cabecera y `lines` con productId, productName, quantity, unitPrice, lineTotal y serials (array de strings, normalizar objetos web) |
-| POST notes | 201 `{"id":1,"noteNumber":"NE-000001"}` |
+| GET dashboard | `{clients,products,notes}` conteos reales |
+| GET clients?q=&limit=50&offset=0 | `{items:[{id,name,rif,address,phone,email,contact}]}` |
+| GET products?q=&limit=50&offset=0 | `{items:[{id,name,barcode,description,category,price,unit,hasSerial,stock}]}` |
+| GET notes?q=&limit=50&offset=0 | `{items:[{id,noteNumber,noteDate,clientName,subtotal,ivaAmount,total,applyIVA}]}` |
+| GET config | `{businessName,ivaRate}` |
+| GET notes/next-number | `{noteNumber}` sugerencia NE-000001, no reserva |
+| GET notes/:id | Cabecera, companyName y lines con productName/serials como strings |
+| POST notes | 201 `{id,noteNumber?}` |
+| GET users | Solo admin; `{items:[{id,email,name,role,active}]}` paginado |
+| POST users | Solo admin; `{email,name,password,role}` → 201 usuario sin hash |
+| PATCH users/:id | Solo admin; `{active:boolean}` → 204; desactivar revoca sesiones |
 
-Búsqueda clientes por nombre/RIF, productos por nombre/código (código exacto primero), notas por número/cliente. Orden estable por id; máximo 50, offset>=0; última página tiene menos de 50 elementos. Importes como cadenas con dos decimales; fechas YYYY-MM-DD; hasSerial/applyIVA booleanos. No envolver en result/data ni SuperJSON.
+No se permite desactivar la propia cuenta. No hay endpoint público de registro. Para crear el primer administrador se usa el comando del servidor documentado en RAILWAY.md.
 
-POST notes incluye `Idempotency-Key` opaco (24 bytes aleatorios hex). Payload:
+Búsqueda por nombre/RIF, nombre/código y número/cliente. Limit 1–50, offset>=0, orden id descendente; comodines escapados. hasSerial/applyIVA booleanos; datos de la misma empresa compartidos para todas las cuentas activas.
+
+POST notes usa `Idempotency-Key` (24–96 caracteres A–Z, a–z, dígitos, _ y -). Ejemplo de cuerpo:
 
 ```json
 {"noteNumber":"NE-000001","noteDate":"2026-10-30","clientName":"Cliente","clientRif":"J-1","clientAddress":"","clientPhone":"","clientContact":"","applyIVA":true,"ivaRate":"16.00","observations":"","deliveredBy":"","receivedBy":"","lines":[{"productId":1,"quantity":1,"unitPrice":"100.25","serials":["ABC"]}]}
 ```
 
-Recalcular todos los totales y validar productos, permisos de precio, tasa fiscal permitida, límites decimales, longitudes, fecha y reglas de WEB_ANALYSIS. Guardar instantánea del cliente. Número único en transacción. Idempotencia persistida y vinculada al usuario+ruta+hash del payload; misma clave/cuerpo devuelve mismo id; misma clave con otro cuerpo devuelve 409. La operación y registro idempotente deben ser atómicos. El cliente no vuelve a enviar automáticamente POST. Reintentar el mismo formulario conserva la clave; cambiar el cuerpo tras un resultado incierto produce 409 hasta resolverlo.
+Valida productos existentes, cantidades enteras, precios/rangos, fecha válida y seriales; serial único dentro de la nota y uno por unidad para hasSerial. La tasa se lee de company_config y se recalculan subtotal, IVA y total en centavos. Una tasa cliente desactualizada devuelve 409. Nota, líneas, seriales y respuesta idempotente se confirman en una misma transacción. Misma clave/usuario/cuerpo devuelve el mismo id; otro cuerpo con esa clave devuelve 409. Número único validado por BD; no sobrescribe notas existentes. No hay reintento automático de POST.
 
-Detalle: `id,noteNumber,noteDate,clientName,clientRif,clientAddress,clientPhone,subtotal,ivaAmount,total,applyIVA,observations,deliveredBy,receivedBy,companyName,lines`. En PDF se usan importes persistidos, no estimaciones móviles.
-
-Errores: 401 sesión expirada (cierre local), 403 no autorizado, 404 nota ausente, 409 conflicto/número/idempotencia, 422 validación, 429 límite, 5xx fallo. UI muestra mensaje genérico sin exponer SQL/tokens. Adaptador debe aplicar rate limiting, auditoría sin secretos, autorización y aislamiento de datos, consultas parametrizadas y TLS válido. No reenviar cookies de producción ni deshabilitar certificados.
-
-Pruebas de aceptación de servidor pendientes: acceso anónimo rechazado en cada ruta; token inválido/expirado/audience incorrecta; permisos y cruce de usuarios; paginación; totales y seriales; rollback; doble POST concurrente con misma clave; conflictos de número y redondeo; datos web visibles en móvil y nota móvil visible en web en staging.
+Errores: 400 JSON inválido, 401 credenciales/sesión, 403 permisos, 404 ausente, 409 conflicto, 413 cuerpo grande, 422 validación, 426 HTTPS, 429 límite, 5xx error. SQL y credenciales nunca se devuelven. TLS termina en Railway; un proxy de ingreso confiable. /health solo responde disponibilidad de BD; no expone información del esquema.

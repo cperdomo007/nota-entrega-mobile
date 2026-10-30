@@ -1,44 +1,42 @@
 # Nota Entrega Mobile
 
-Cliente Android Flutter/Dart con Material 3, Riverpod, GoRouter y Dio.
+Aplicación Android Flutter/Dart con Material 3, Riverpod, GoRouter y Dio. El acceso utiliza correo y contraseña a través de una API HTTPS propia en `backend/`.
 
-## Estado de la integración
+## Ejecutar el cliente
 
-La web de referencia usa OAuth Manus y tRPC con cookie. **No existe todavía el adaptador REST/OIDC que este cliente necesita.** No apuntar API_BASE_URL directamente a /api/trpc. Las pantallas y operaciones están implementadas contra el contrato propuesto en docs/API.md; el acceso con datos compartidos requiere implementar y aprobar ese adaptador en staging. No se modificó el repositorio web ni la base de producción. No hay conexión MySQL, credenciales de BD, cuentas de demostración ni un bypass de autenticación en Flutter.
-
-## Ejecutar
-
-1. Instalar Flutter 3.47.9 (Dart 3.13.7) y Android SDK/JDK 17.
+1. Flutter 3.47.9 / Dart 3.13.7, JDK 17 y Android SDK.
 2. `flutter pub get`
-3. Copiar `config/env.example.json` a `config/env.local.json` y configurar un proveedor OIDC y API de staging aprobados.
+3. Copiar `config/env.example.json` a `config/env.local.json` y definir `API_BASE_URL` con la URL HTTPS de la API terminada en `/api/mobile/v1/`.
 4. `flutter run --dart-define-from-file=config/env.local.json`
-5. `flutter analyze`, `flutter test`, `flutter build apk --debug --dart-define-from-file=config/env.local.json`
 
-Variables públicas compiladas en la app (no son secretos):
+Flutter no contiene acceso directo a MySQL ni credenciales de BD. La única variable compilada es `API_BASE_URL`, pública. OAuth/OIDC del prototipo fue sustituido por acceso con usuarios propios; el acceso OAuth de la web permanece independiente.
 
-| Variable | Uso |
-| --- | --- |
-| API_BASE_URL | HTTPS, base del adaptador, con barra final `/api/mobile/v1/` |
-| OIDC_ISSUER | Emisor HTTPS con discovery OIDC y PKCE S256 |
-| OIDC_CLIENT_ID | ID de cliente público Android, sin client_secret |
+## Servidor y datos compartidos
 
-Registrar exactamente `com.notaentrega.mobile:/oauthredirect` en el proveedor. Android usa el esquema `com.notaentrega.mobile`. Los access tokens viven en memoria; refresh tokens en almacenamiento seguro Android. Al iniciar se intenta renovar; ante 401 se cierra la sesión. Al vencer el access token durante el uso se solicita nuevo acceso, sin reintentar escrituras automáticamente. Cerrar sesión elimina tokens locales; la sesión del navegador/proveedor puede persistir. No se registra tráfico ni tokens. Android prohíbe tráfico HTTP, respaldos y restauración de credenciales.
+`backend/` implementa autenticación, sesiones revocables, administración de usuarios y el contrato de datos de clientes/productos/notas. Se conecta a la BD de la web desde el servidor. Consultar [despliegue Railway](docs/RAILWAY.md) y [contrato API](docs/API.md).
+
+La migración agrega exclusivamente `mobile_users`, `mobile_sessions` y `mobile_note_requests`. No altera `users` ni las tablas de negocio existentes. No se ejecutan migraciones desde Flutter. El primer administrador y su contraseña se establecen privadamente mediante el comando de creación de usuario. No existe registro público ni una contraseña predeterminada.
+
+Las sesiones usan access tokens aleatorios de 15 minutos en memoria, refresh tokens rotatorios de 30 días en almacenamiento seguro y hashes de ambos tokens en MySQL. Un 401 cierra la sesión local. Al reabrir la app se intenta renovar. Cerrar sesión revoca el refresh token en el servidor cuando hay conexión. Sin conexión, se elimina localmente y la sesión remota caduca por expiración. No se almacenan contraseñas en Flutter. HTTPS obligatorio; no hay logs de tokens ni contraseñas.
 
 ## Funcionalidades
 
-- Inicio de sesión en navegador del sistema mediante OAuth/OIDC PKCE.
-- Dashboard con indicadores del servidor.
-- Clientes, productos y notas con búsqueda explícita, paginación, errores y reintento.
-- Creación: selección de cliente/productos, fecha, número, cantidades, precios, IVA, observaciones y responsables.
-- Seriales manuales y mediante cámara; búsqueda de producto por código escaneado.
-- Detalle y PDF A4 multipágina compartido por el selector nativo.
+- Inicio de sesión con correo/contraseña y recuperación de sesión.
+- Dashboard, clientes y productos con búsqueda/paginación.
+- Listado, creación y detalle de notas; seriales manuales y cámara.
+- PDF A4 multipágina con fuentes incluidas y selector nativo para compartir.
+- API: creación/desactivación de usuarios solo por administradores; cuentas desactivadas pierden acceso y sesiones.
 
-Los totales locales son una estimación; el servidor recalcula los definitivos. Las escrituras usan Idempotency-Key y no se repiten automáticamente. Conservar el mismo formulario al reintentar una respuesta incierta. No cambiar sus datos tras un timeout hasta resolver el resultado con el servidor. Sin soporte offline ni cola de escrituras.
+Todos los usuarios activos pertenecen a la misma empresa y comparten su catálogo y notas; no hay aislamiento multiempresa. Los totales definitivos se calculan en el servidor según el IVA configurado. El precio unitario es editable por usuarios autorizados a crear notas, como en la web. No se agrega descuento automático de stock.
 
-## Estructura
+## Pruebas y compilación
 
-`lib/core`: configuración y sesión. `lib/data`: API y PDF. `lib/domain`: modelos y validación. `lib/ui`: pantallas y cámara. `android`: proyecto nativo. `test`: reglas, PDF y acceso. `docs`: análisis web, contrato y verificación. `.github/workflows/android.yml`: análisis, pruebas y APK debug de CI.
+`flutter analyze --no-pub`, `flutter test --no-pub --coverage`, `flutter build apk --debug --dart-define-from-file=config/env.local.json`.
 
-## Pendientes
+En `backend/`: `npm ci`, `npm test`. La integración usa `TEST_DATABASE_URL` exclusivamente con una base descartable cuyo nombre termine en `_test`: `npm run test:integration`. Nunca ejecutar fixtures de prueba sobre Railway producción.
 
-Implementación autorizada del adaptador, registro OAuth Android e integración en staging; permisos/roles y pruebas de extremo a extremo con datos de prueba; revisión visual y cámara/compartir en dispositivo; logo corporativo y revisión del formato PDF; firma release y distribución. Ver docs/VALIDATION.md para las verificaciones realmente ejecutadas.
+GitHub Actions analiza y prueba Flutter, compila APK debug, prueba el backend con MySQL 8.4 aislado y construye su Dockerfile. Consultar el resultado de la ejecución del commit correspondiente; no confundir APKs anteriores con el nuevo login.
+
+## Estado
+
+Ver `docs/VALIDATION.md`. El código y la migración no implican que el servidor esté desplegado o que se haya creado el usuario en producción. El despliegue, la URL definitiva del APK y la contraseña inicial se verifican por separado. Pendientes de verificación en dispositivo: cámara/permisos, compartir PDF y revisión visual. Firma/distribución release no configuradas.

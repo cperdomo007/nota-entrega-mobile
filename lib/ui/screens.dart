@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 
 import '../main.dart';
-import '../core/config.dart';
 import '../data/note_pdf.dart';
 import '../domain/models.dart';
 import 'scanner.dart';
@@ -27,55 +26,130 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  bool busy = false;
+  final form = GlobalKey<FormState>();
+  final email = TextEditingController(), password = TextEditingController();
+  bool busy = false, visible = false;
+  @override
+  void dispose() {
+    email.dispose();
+    password.dispose();
+    super.dispose();
+  }
+
+  Future<void> submit() async {
+    if (busy ||
+        !ref.read(sessionProvider).configured ||
+        !form.currentState!.validate()) {
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      await ref.read(sessionProvider).signIn(email.text, password.text);
+    } catch (_) {
+      if (mounted) {
+        showError(
+          context,
+          'No se pudo acceder. Revisa correo, contraseña y conexión.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Padding(
+    body: SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Icon(Icons.receipt_long, size: 72),
-              const SizedBox(height: 24),
-              Text(
-                'Nota Entrega Mobile',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Accede con tu cuenta empresarial para consultar y crear notas de entrega.',
-              ),
-              const SizedBox(height: 24),
-              if (!AppConfig.ready)
-                const Text(
-                  'Configura API_BASE_URL, OIDC_ISSUER y OIDC_CLIENT_ID para habilitar el acceso.',
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Form(
+              key: form,
+              child: AutofillGroup(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Icon(Icons.receipt_long, size: 72),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Nota Entrega Mobile',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Ingresa con tu cuenta para gestionar las notas de entrega.',
+                    ),
+                    const SizedBox(height: 24),
+                    TextFormField(
+                      controller: email,
+                      enabled: !busy,
+                      autofillHints: const [AutofillHints.username],
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      autocorrect: false,
+                      decoration: const InputDecoration(
+                        labelText: 'Correo electrónico',
+                        prefixIcon: Icon(Icons.person_outline),
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) =>
+                          value != null &&
+                              RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+                                  .hasMatch(value.trim())
+                          ? null
+                          : 'Ingresa un correo válido',
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: password,
+                      enabled: !busy,
+                      obscureText: !visible,
+                      autofillHints: const [AutofillHints.password],
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => submit(),
+                      decoration: InputDecoration(
+                        labelText: 'Contraseña',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          tooltip: visible
+                              ? 'Ocultar contraseña'
+                              : 'Mostrar contraseña',
+                          onPressed: () => setState(() => visible = !visible),
+                          icon: Icon(
+                            visible ? Icons.visibility_off : Icons.visibility,
+                          ),
+                        ),
+                      ),
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Ingresa tu contraseña'
+                          : null,
+                    ),
+                    const SizedBox(height: 20),
+                    if (!ref.read(sessionProvider).configured)
+                      const Text(
+                        'La conexión al servidor aún no está configurada.',
+                      ),
+                    FilledButton.icon(
+                      onPressed: busy || !ref.read(sessionProvider).configured
+                          ? null
+                          : submit,
+                      icon: const Icon(Icons.login),
+                      label: Text(busy ? 'Accediendo…' : 'Iniciar sesión'),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Solicita tu cuenta al administrador. No hay registro público.',
+                    ),
+                  ],
                 ),
-              FilledButton.icon(
-                onPressed: busy || !AppConfig.ready
-                    ? null
-                    : () async {
-                        setState(() => busy = true);
-                        try {
-                          await ref.read(sessionProvider).signIn();
-                        } catch (_) {
-                          if (context.mounted) {
-                            showError(
-                              context,
-                              'No se pudo iniciar sesión o el acceso fue cancelado.',
-                            );
-                          }
-                        } finally {
-                          if (mounted) setState(() => busy = false);
-                        }
-                      },
-                icon: const Icon(Icons.login),
-                label: Text(busy ? 'Accediendo…' : 'Iniciar sesión segura'),
               ),
-            ],
+            ),
           ),
         ),
       ),

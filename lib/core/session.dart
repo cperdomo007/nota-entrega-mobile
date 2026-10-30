@@ -1,69 +1,98 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'config.dart';
 
 class Session extends ChangeNotifier {
-  final FlutterAppAuth auth;
   final FlutterSecureStorage storage;
+  final Dio dio;
+  final String baseUrl;
   Session({
-    this.auth = const FlutterAppAuth(),
     this.storage = const FlutterSecureStorage(),
-  });
+    Dio? client,
+    this.baseUrl = AppConfig.apiUrl,
+  }) : dio =
+           client ??
+           Dio(
+             BaseOptions(
+               baseUrl: baseUrl,
+               connectTimeout: const Duration(seconds: 15),
+               receiveTimeout: const Duration(seconds: 30),
+               followRedirects: false,
+             ),
+           );
   String? _access;
   bool get signedIn => _access != null;
   String? get accessToken => _access;
-  Future<void> signIn() async {
-    if (!AppConfig.ready) throw StateError('Falta configurar API y OAuth');
-    final result = await auth.authorizeAndExchangeCode(
-      AuthorizationTokenRequest(
-        AppConfig.clientId,
-        AppConfig.redirect,
-        issuer: AppConfig.issuer,
-        scopes: ['openid', 'profile', 'offline_access'],
-      ),
-    );
-    if (result.accessToken == null) throw StateError('No se recibió un token');
-    await storage.delete(key: 'refresh_token');
-    if (result.refreshToken != null) {
-      await storage.write(key: 'refresh_token', value: result.refreshToken);
+  Map<String, dynamic>? user;
+  String get _storageKey => 'mobile_refresh_v1_${Uri.encodeComponent(baseUrl)}';
+  bool get configured => AppConfig.isHttps(baseUrl) && baseUrl.endsWith('/');
+  Future<void> _accept(Map<String, dynamic> result) async {
+    final access = result['accessToken'], refresh = result['refreshToken'];
+    if (access is! String ||
+        refresh is! String ||
+        !RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(access) ||
+        !RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(refresh)) {
+      throw const FormatException('Respuesta de sesión inválida');
     }
-    _access = result.accessToken;
+    final account = result['user'];
+    if (account is! Map ||
+        account['id'] is! int ||
+        account['email'] is! String) {
+      throw const FormatException('Usuario de sesión inválido');
+    }
+    await storage.write(key: _storageKey, value: refresh);
+    _access = access;
+    user = Map<String, dynamic>.from(account);
     notifyListeners();
   }
 
+  Future<void> signIn(String email, String password) async {
+    if (!configured) throw StateError('Falta configurar una API HTTPS');
+    final result = await dio.post<Map<String, dynamic>>(
+      'auth/login',
+      data: {'email': email.trim().toLowerCase(), 'password': password},
+    );
+    await _accept(result.data!);
+  }
+
   Future<void> restore() async {
-    if (!AppConfig.ready) return;
+    if (!configured) return;
     try {
-      final refresh = await storage.read(key: 'refresh_token');
+      // Discard credentials from the previous OAuth prototype.
+      await storage.delete(key: 'refresh_token');
+      final refresh = await storage.read(key: _storageKey);
       if (refresh == null) return;
-      final result = await auth.token(
-        TokenRequest(
-          AppConfig.clientId,
-          AppConfig.redirect,
-          issuer: AppConfig.issuer,
-          refreshToken: refresh,
-        ),
+      final result = await dio.post<Map<String, dynamic>>(
+        'auth/refresh',
+        data: {'refreshToken': refresh},
       );
-      if (result.accessToken == null) throw StateError('Sesión inválida');
-      if (result.refreshToken != null) {
-        await storage.write(key: 'refresh_token', value: result.refreshToken);
-      }
-      _access = result.accessToken;
-      notifyListeners();
+      await _accept(result.data!);
     } catch (_) {
+      _access = null;
+      user = null;
       try {
-        await signOut();
+        await storage.delete(key: _storageKey);
       } catch (_) {
-        /* Keep the login screen available. */
+        /* Login remains available. */
       }
+      notifyListeners();
     }
   }
 
   Future<void> signOut() async {
     _access = null;
+    user = null;
     notifyListeners();
-    await storage.delete(key: 'refresh_token');
+    final refresh = await storage.read(key: _storageKey);
+    await storage.delete(key: _storageKey);
+    if (refresh != null && configured) {
+      try {
+        await dio.post<void>('auth/logout', data: {'refreshToken': refresh});
+      } catch (_) {
+        /* Local credentials are already removed; server sessions expire. */
+      }
+    }
   }
 }

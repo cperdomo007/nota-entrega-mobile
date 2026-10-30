@@ -14,7 +14,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Nota Entrega Mobile'), findsOneWidget);
-    expect(find.text('Iniciar sesión segura'), findsOneWidget);
+    expect(find.text('Iniciar sesión'), findsOneWidget);
     final button = tester.widget<FilledButton>(find.byType(FilledButton));
     expect(button.onPressed, isNull);
   });

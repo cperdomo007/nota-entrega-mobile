@@ -13,3 +13,6 @@ config/env.local.json
 *.jks
 *.keystore
 key.properties
+node_modules/
+.env.*
+!.env.example

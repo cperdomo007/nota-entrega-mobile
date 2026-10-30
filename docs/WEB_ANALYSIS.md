@@ -30,3 +30,7 @@ El cliente conserva nombres camelCase y cadenas decimales. Usa centavos para est
 Fuentes principales: `drizzle/schema.ts`, `server/routers.ts`, `server/db.ts`, `server/_core/{oauth,sdk,context,trpc,index}.ts`, `client/src/pages`, `client/src/lib` y pruebas de cálculo.
 
 El dashboard web consulta las cinco notas recientes (Home.tsx); los indicadores de conteo propuestos en el móvil requieren una agregación nueva del adaptador. NoteDetail.tsx usa window.print() para imprimir y Guardar como PDF en el navegador. El cliente Android genera el documento localmente con pdf/printing. El SDK también contempla identidades cron_ para tareas; no deben utilizarse como identidad móvil ni eludir el vínculo con usuarios humanos.
+
+## Evolución: usuarios móviles propios
+
+La implementación posterior agrega un backend separado en el repositorio móvil, con `mobile_users` y sesiones propias. Esto sustituye el contrato OIDC propuesto inicialmente sin alterar la autenticación OAuth ni el código de la web. Las tablas de negocio del servicio MySQL de Railway se verificaron en modo de consulta. Las tres tablas móviles son adicionales y requieren ejecutar su migración en servidor; la presencia del archivo SQL no significa que ya existan en producción.
