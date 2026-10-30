@@ -14,7 +14,9 @@ Railway, con autorización específica del propietario:
 - Servicio API separado `b9936f5c-274e-4c0d-ab2e-505e3343215f` desplegado, conectado por referencia privada a MySQL.
 - Migración aditiva ejecutada correctamente; tablas web conservadas.
 - Desde Console, `/health` respondió 200 y `/api/mobile/v1/clients` sin token respondió 401 (solicitud local con X-Forwarded-Proto=https para comprobar la autenticación detrás del ingreso).
-- Se mantuvo la API privada, sin generar dominio público, conforme a la decisión posterior del propietario.
+- Tras autorización explícita posterior del propietario, se publicó el dominio HTTPS nota-entrega-mobile-production.up.railway.app. Desde Internet, con validación TLS normal: health 200; clients/products/notes/users/config sin token 401; Cache-Control no-store.
 - Se habilitaron espera de CI y despliegues limitados a cambios `/backend/**`.
 
-Pendientes que impiden considerar el login del teléfono operativo: el propietario debe establecer privadamente la contraseña del administrador y completar el alta; hace falta configurar una VPN/pasarela privada HTTPS para alcanzar Railway desde Android. No se verificó un login de producción ni se publicaron credenciales. Cámara, permisos, compartir PDF y revisión visual en dispositivo siguen pendientes; firma release no configurada. No se ejecutaron fixtures ni escrituras de negocio de prueba en producción.
+Pendientes que impiden considerar el login del teléfono operativo: el propietario debe establecer privadamente la contraseña del administrador y completar el alta; el APK debe ser el que usa config/env.production.json para alcanzar la API HTTPS real, en vez de los artefactos anteriores con dominio de ejemplo. No se verificó un login de producción ni se publicaron credenciales. Cámara, permisos, compartir PDF y revisión visual en dispositivo siguen pendientes; firma release no configurada. No se ejecutaron fixtures ni escrituras de negocio de prueba en producción.
+
+La configuración HTTPS se incorpora en la versión 0.2.2+4, conservando el logo de Sumisistemas. El workflow compila con config/env.production.json y publica nota-entrega-https-debug. Consultar el resultado del commit de esta configuración antes de afirmar una nueva compilación exitosa.

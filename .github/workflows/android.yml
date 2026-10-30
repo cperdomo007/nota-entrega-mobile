@@ -29,10 +29,10 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter analyze
       - run: flutter test --coverage
-      - run: flutter build apk --debug --dart-define-from-file=config/env.example.json
+      - run: flutter build apk --debug --dart-define-from-file=config/env.production.json
       - uses: actions/upload-artifact@v4
         with:
-          name: nota-entrega-debug
+          name: nota-entrega-https-debug
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
       - uses: actions/upload-artifact@v4

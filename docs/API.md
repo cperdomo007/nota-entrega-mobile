@@ -41,4 +41,4 @@ Valida productos existentes, cantidades enteras, precios/rangos, fecha válida y
 
 Errores: 400 JSON inválido, 401 credenciales/sesión, 403 permisos, 404 ausente, 409 conflicto, 413 cuerpo grande, 422 validación, 426 HTTPS, 429 límite, 5xx error. SQL y credenciales nunca se devuelven. TLS termina en Railway; un proxy de ingreso confiable. /health solo responde disponibilidad de BD; no expone información del esquema.
 
-Despliegue actual: solo red privada de Railway, sin URL HTTPS accesible desde Android. Se requiere una VPN/pasarela privada HTTPS antes de conectar el APK. No se habilitó HTTP en Flutter ni se generó un dominio público.
+Despliegue autorizado: https://nota-entrega-mobile-production.up.railway.app/api/mobile/v1/ . La API es pública por HTTPS, las rutas de datos requieren sesión y API→MySQL usa red privada. No se habilitó HTTP ni conexión MySQL en Flutter.

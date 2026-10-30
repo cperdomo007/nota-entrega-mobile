@@ -6,8 +6,8 @@ Aplicación Android Flutter/Dart con Material 3, Riverpod, GoRouter y Dio. El ac
 
 1. Flutter 3.47.9 / Dart 3.13.7, JDK 17 y Android SDK.
 2. `flutter pub get`
-3. Copiar `config/env.example.json` a `config/env.local.json` y definir `API_BASE_URL` con la URL HTTPS de la API terminada en `/api/mobile/v1/`.
-4. `flutter run --dart-define-from-file=config/env.local.json`
+3. La URL autorizada está en `config/env.production.json`: `https://nota-entrega-mobile-production.up.railway.app/api/mobile/v1/`. Para otro entorno, copiar `config/env.example.json` a `config/env.local.json`.
+4. `flutter run --dart-define-from-file=config/env.production.json`
 
 Flutter no contiene acceso directo a MySQL ni credenciales de BD. La única variable compilada es `API_BASE_URL`, pública. OAuth/OIDC del prototipo fue sustituido por acceso con usuarios propios; el acceso OAuth de la web permanece independiente.
 
@@ -35,8 +35,8 @@ Todos los usuarios activos pertenecen a la misma empresa y comparten su catálog
 
 En `backend/`: `npm ci`, `npm test`. La integración usa `TEST_DATABASE_URL` exclusivamente con una base descartable cuyo nombre termine en `_test`: `npm run test:integration`. Nunca ejecutar fixtures de prueba sobre Railway producción.
 
-GitHub Actions analiza y prueba Flutter, compila APK debug, prueba el backend con MySQL 8.4 aislado y construye su Dockerfile. Consultar el resultado de la ejecución del commit correspondiente; no confundir APKs anteriores con el nuevo login.
+GitHub Actions analiza y prueba Flutter, compila APK debug con config/env.production.json, prueba el backend con MySQL 8.4 aislado y construye su Dockerfile. Consultar el resultado de la ejecución del commit correspondiente; no confundir APKs anteriores con el nuevo login.
 
 ## Estado
 
-Ver `docs/VALIDATION.md`. La API y la migración ya fueron desplegadas en Railway con autorización. La API se mantuvo privada por decisión del propietario: el APK no puede acceder desde Internet hasta configurar una VPN/pasarela privada HTTPS. El propietario debe establecer privadamente la contraseña inicial y completar el alta del administrador. Pendientes de verificación en dispositivo: cámara/permisos, compartir PDF y revisión visual. Firma/distribución release no configuradas.
+Ver `docs/VALIDATION.md`. La API y la migración ya fueron desplegadas en Railway con autorización. La API está publicada por HTTPS con autorización expresa del propietario y el APK se configura con esa URL. Las rutas de datos exigen sesión; la conexión del backend a MySQL continúa usando la red privada de Railway. El propietario debe establecer privadamente la contraseña inicial y completar el alta del administrador. Pendientes de verificación en dispositivo: cámara/permisos, compartir PDF y revisión visual. Firma/distribución release no configuradas.
