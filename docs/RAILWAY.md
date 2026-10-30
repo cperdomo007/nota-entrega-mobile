@@ -22,9 +22,9 @@ La migración autorizada creó mobile_users, mobile_sessions y mobile_note_reque
 
 Desde fuera de Railway, usando validación TLS normal (sin deshabilitar certificados), /health respondió 200 y clients/products/notes/users/config sin token respondieron 401. Las respuestas incluyen Cache-Control: no-store. Login/salud son públicos; los datos necesitan un Bearer vigente y usuario activo. No se agregó registro público.
 
-## Primer administrador: paso privado del propietario
+## Primer administrador: alta confirmada por el propietario
 
-El correo acordado está fuera del repositorio. La contraseña inicial la introduce el propietario, nunca en el chat. En Console del servicio API, ejecutar lo siguiente sustituyendo el correo de ejemplo por el acordado. Las contraseñas se leen sin mostrarlas y no quedan en el comando/historial:
+El propietario confirmó que la consola mostró «Usuario creado». El correo acordado está fuera del repositorio y la contraseña se estableció privadamente. Se conserva el procedimiento de alta como referencia; no volver a ejecutarlo para sobrescribir cuentas. En Console del servicio API, ejecutar lo siguiente sustituyendo el correo de ejemplo por el acordado. Las contraseñas se leen sin mostrarlas y no quedan en el comando/historial:
 
 ```bash
 read -r -s -p 'Nueva contraseña (mínimo 12 caracteres): ' NEW_USER_PASSWORD; echo
