@@ -1,6 +1,6 @@
 # Verificación ejecutada — 2026-10-30
 
-Entorno local Windows: Flutter 3.47.9, Dart 3.13.7. Proyecto Android generado con `flutter create --platforms=android --org com.notaentrega --project-name nota_entrega_mobile --no-pub mobile` y ajustado para applicationId com.notaentrega.mobile, minSdk 23 y retorno OAuth.
+Entorno local Windows: Flutter 3.47.9, Dart 3.13.7. Proyecto Android generado con `flutter create --platforms=android --org com.notaentrega --project-name nota_entrega_mobile --no-pub mobile` y ajustado para applicationId com.notaentrega.mobile, minSdk 24 (requerido por flutter_appauth 12.1.0) y retorno OAuth.
 
 - `flutter pub get --enforce-lockfile`: correcto; pubspec.lock versionado.
 - `dart format --output=none --set-exit-if-changed lib test`: correcto tras aplicar formato con el SDK mínimo final.
