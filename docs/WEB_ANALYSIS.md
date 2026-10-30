@@ -34,3 +34,5 @@ El dashboard web consulta las cinco notas recientes (Home.tsx); los indicadores 
 ## Evolución: usuarios móviles propios
 
 La implementación posterior agrega un backend separado en el repositorio móvil, con `mobile_users` y sesiones propias. Esto sustituye el contrato OIDC propuesto inicialmente sin alterar la autenticación OAuth ni el código de la web. Las tablas de negocio del servicio MySQL de Railway se verificaron en modo de consulta. Las tres tablas móviles son adicionales y requieren ejecutar su migración en servidor; la presencia del archivo SQL no significa que ya existan en producción.
+
+Tras autorización específica del propietario, la migración aditiva se ejecutó en el MySQL de Railway y la API se desplegó como servicio separado. Se conservaron el código web y sus tablas. El propietario decidió mantener privada la API; la conectividad del teléfono requiere una vía privada HTTPS adicional.

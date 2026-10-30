@@ -39,4 +39,4 @@ GitHub Actions analiza y prueba Flutter, compila APK debug, prueba el backend co
 
 ## Estado
 
-Ver `docs/VALIDATION.md`. El código y la migración no implican que el servidor esté desplegado o que se haya creado el usuario en producción. El despliegue, la URL definitiva del APK y la contraseña inicial se verifican por separado. Pendientes de verificación en dispositivo: cámara/permisos, compartir PDF y revisión visual. Firma/distribución release no configuradas.
+Ver `docs/VALIDATION.md`. La API y la migración ya fueron desplegadas en Railway con autorización. La API se mantuvo privada por decisión del propietario: el APK no puede acceder desde Internet hasta configurar una VPN/pasarela privada HTTPS. El propietario debe establecer privadamente la contraseña inicial y completar el alta del administrador. Pendientes de verificación en dispositivo: cámara/permisos, compartir PDF y revisión visual. Firma/distribución release no configuradas.
