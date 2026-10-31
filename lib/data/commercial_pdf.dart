@@ -295,12 +295,24 @@ pw.Widget _table(List<Json> lines, bool budget) {
   );
 }
 
-pw.Widget _observations(String value) => pw.Container(
+pw.Widget _observations(String value, {required bool budget}) => pw.Container(
   width: double.infinity,
   constraints: const pw.BoxConstraints(minHeight: 42),
   padding: const pw.EdgeInsets.all(7),
   decoration: pw.BoxDecoration(border: pw.Border.all(width: .7)),
-  child: _label('Observaciones:', value),
+  child: budget
+      ? _label('Observaciones:', value)
+      : pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'Observaciones:',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(value),
+          ],
+        ),
 );
 
 pw.Widget _totals(Json d, bool budget) {
@@ -410,13 +422,16 @@ Future<Uint8List> buildCommercialPdf(Json d, {required bool budget}) async {
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Expanded(flex: 3, child: _observations(observations.first)),
+              pw.Expanded(
+                flex: 3,
+                child: _observations(observations.first, budget: true),
+              ),
               pw.SizedBox(width: 24),
               pw.Expanded(flex: 2, child: _totals(d, budget)),
             ],
           )
         else ...[
-          for (final part in observations) _observations(part),
+          for (final part in observations) _observations(part, budget: budget),
           pw.SizedBox(height: 14),
           pw.Align(
             alignment: pw.Alignment.centerRight,
