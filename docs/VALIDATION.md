@@ -1,4 +1,14 @@
-# Validación 0.5.0+8: edición y login
+# Validación 0.6.0+9: lectura de RIF
+
+- `flutter analyze --no-pub`: sin incidencias; `flutter test --no-pub --coverage`: 36 pruebas aprobadas localmente.
+- Siete pruebas nuevas cubren los dos diseños SENIAT con datos ficticios, nombre en la misma línea/separado, dirección multilínea, exclusión de fechas/pies, RIF incompleto, corrección, aplicación explícita, cancelación del selector/revisión y fallo de lectura sin pérdida del formulario. El canal nativo se simula en las pruebas Flutter; no equivale a ejecutar OCR real en Android.
+- Se inspeccionaron localmente los ejemplos facilitados, sin incorporarlos a git ni crear clientes de prueba en producción. PDF se renderiza con PdfRenderer Android; imágenes se reducen con límite de resolución y se corrige su orientación EXIF antes del OCR.
+- ML Kit escáner 16.0.0 y OCR latino Play Services 19.0.2, sin modelos pesados integrados. Archivos de hasta 20 MB, solo primera página, caché privada temporal eliminada al terminar; sin subir documentos al backend. No cambia la API ni requiere despliegue/migraciones de Railway.
+- GitHub Actions ejecutará análisis, pruebas, comprobación de seis PDF, backend/MySQL aislado, Docker y compilación Android release por arquitectura. Consultar el run del commit publicado antes de afirmar que los APK de esta versión están compilados.
+
+Pendiente verificar cámara/selector/descarga inicial de módulos, OCR real, permisos y archivos PDF/imágenes en un teléfono con Google Play Services; PDF cifrado/corrupto, dispositivo sin soporte, giro y recuperación tras cierre del proceso. No se verificó captura real ni se instaló un APK localmente. Se mantiene firma de prueba; firma de producción pendiente.
+
+## Historial 0.5.0+8: edición y login
 
 - `flutter analyze --no-pub`: sin incidencias. `flutter test --no-pub --coverage`: 29 pruebas aprobadas, incluidas edición de cliente/producto/nota/presupuesto, datos precargados, seriales, línea manual sin producto, número conservado y limpieza de credenciales rechazadas. Fallos de conexión conservan los campos.
 - Seis pruebas unitarias/de seguridad del backend aprobadas; GET y PUT sin sesión protegidos. Seis PDF reales verificados con pypdf, conservando formatos, seriales e importes sin códigos de producto.

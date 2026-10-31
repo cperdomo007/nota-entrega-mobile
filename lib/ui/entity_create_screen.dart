@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/api_errors.dart';
 import '../domain/models.dart';
 import '../main.dart';
+import 'rif_scan.dart';
 
 String creationKey() => List.generate(
   24,
@@ -49,7 +50,7 @@ class _EntityCreateScreenState extends ConsumerState<EntityCreateScreen> {
           : name == 'stock'
           ? '0'
           : '');
-  bool serial = false, busy = false;
+  bool serial = false, busy = false, scanning = false;
   String? error;
   bool get product => widget.kind == 'products';
   TextEditingController field(String name) => fields.putIfAbsent(
@@ -57,6 +58,21 @@ class _EntityCreateScreenState extends ConsumerState<EntityCreateScreen> {
     () => TextEditingController(text: valueFor(name)),
   );
   String value(String name) => field(name).text.trim();
+  Future<void> scanRif() async {
+    setState(() => scanning = true);
+    try {
+      final result = await readRif(context);
+      if (!mounted || result == null) return;
+      setState(() {
+        if (result.rif.isNotEmpty) field('rif').text = result.rif;
+        if (result.name.isNotEmpty) field('name').text = result.name;
+        if (result.address.isNotEmpty) field('address').text = result.address;
+      });
+    } finally {
+      if (mounted) setState(() => scanning = false);
+    }
+  }
+
   @override
   void dispose() {
     for (final controller in fields.values) {
@@ -189,12 +205,28 @@ class _EntityCreateScreenState extends ConsumerState<EntityCreateScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         return AbsorbPointer(
-          absorbing: busy,
+          absorbing: busy || scanning,
           child: Form(
             key: form,
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                if (!product) ...[
+                  OutlinedButton.icon(
+                    onPressed: scanning ? null : scanRif,
+                    icon: scanning
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.document_scanner_outlined),
+                    label: Text(
+                      scanning ? 'Leyendo documento…' : 'Leer datos desde RIF',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 input(
                   'name',
                   product ? 'Nombre del producto' : 'Nombre o razón social',

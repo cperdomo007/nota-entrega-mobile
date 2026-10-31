@@ -37,6 +37,10 @@ Desde 0.5.0+8, editar conserva ID y número original del documento. Se pueden ca
 
 ## Pruebas y compilación
 
+Desde 0.6.0+9, en crear/editar clientes, **Leer datos desde RIF** permite escanear con cámara (recorte y corrección de perspectiva) o elegir una imagen/PDF del selector de Android. Se reconoce la primera página, hasta 20 MB, y se sugieren RIF, razón social y domicilio fiscal de los formatos SENIAT. Siempre se revisan y pueden corregirse antes de aplicar al formulario; aplicar no guarda ni crea el cliente. Cancelar o fallar conserva los campos, y los valores no detectados no reemplazan los existentes. No se verifica la vigencia ni la autenticidad del RIF.
+
+OCR local mediante ML Kit latino y escáner de Google Play Services; primer uso requiere Internet para descargar módulos. Android sin Play Services o sin soporte de escáner puede usar ingreso manual; una imagen/PDF legible también requiere el módulo OCR disponible. PDF protegidos/corruptos y archivos grandes muestran un mensaje. No se envía la imagen, el PDF ni el texto OCR al backend: solo los campos revisados al pulsar Guardar cliente. Se elimina la copia temporal privada al finalizar la lectura; la imagen capturada por el escáner queda bajo la gestión de caché de Play Services. No se solicitan permisos generales de almacenamiento. La implementación usa el canal nativo `nota_entrega/rif_scanner`, sin agregar motor PDF ni modelos OCR pesados al APK. Dependencias y requisitos: [escáner ML Kit](https://developers.google.com/ml-kit/vision/doc-scanner/android), [OCR ML Kit](https://developers.google.com/ml-kit/vision/text-recognition/v2/android).
+
 `flutter analyze --no-pub`, `flutter test --no-pub --coverage`, `flutter build apk --debug --dart-define-from-file=config/env.local.json`.
 
 En `backend/`: `npm ci`, `npm test`. La integración usa `TEST_DATABASE_URL` exclusivamente con una base descartable cuyo nombre termine en `_test`: `npm run test:integration`. Nunca ejecutar fixtures de prueba sobre Railway producción.
