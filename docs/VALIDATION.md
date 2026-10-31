@@ -1,4 +1,12 @@
-# Validación 0.6.0+9: lectura de RIF
+# Validación 0.6.1+10: botón de guardar
+
+Botón compartido de creación/edición de presupuestos y notas: altura mínima de 64 dp, texto de 18 sp seminegrita, icono de guardar y espacio interno ampliado. El formulario usa SafeArea inferior/lateral para respetar las barras del sistema, conservando desplazamiento y adaptación al teclado.
+
+- `flutter analyze --no-pub`: sin incidencias.
+- Ocho pruebas existentes de creación/edición aprobadas localmente (`edit_flow_test.dart`, `note_flow_test.dart`, `creation_flow_test.dart`). No cambian guardado, numeración, seriales ni totales.
+- CI del commit publicado ejecutará la suite completa y la compilación Android optimizada; consultar su resultado antes de afirmar una nueva compilación exitosa. No hay cambios del backend ni de producción. Pendiente verificar tamaño y separación de la navegación en el teléfono de la captura.
+
+## Historial 0.6.0+9: lectura de RIF
 
 - `flutter analyze --no-pub`: sin incidencias; `flutter test --no-pub --coverage`: 36 pruebas aprobadas localmente.
 - Siete pruebas nuevas cubren los dos diseños SENIAT con datos ficticios, nombre en la misma línea/separado, dirección multilínea, exclusión de fechas/pies, RIF incompleto, corrección, aplicación explícita, cancelación del selector/revisión y fallo de lectura sin pérdida del formulario. El canal nativo se simula en las pruebas Flutter; no equivale a ejecutar OCR real en Android.

@@ -757,115 +757,136 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
         final iva = applyIva ? (subtotal * rateBps / 10000).round() : 0;
         return AbsorbPointer(
           absorbing: busy,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              TextField(
-                controller: number,
-                readOnly: true,
-                decoration: InputDecoration(
-                  labelText: 'Número (DDMMAAAAHHMM)',
-                  helperText: widget.id == null
-                      ? 'Vista previa. Se asigna al guardar con la hora de Venezuela.'
-                      : 'Se conserva el número original. Totales con el IVA actual al guardar.',
+          child: SafeArea(
+            top: false,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                TextField(
+                  controller: number,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: 'Número (DDMMAAAAHHMM)',
+                    helperText: widget.id == null
+                        ? 'Vista previa. Se asigna al guardar con la hora de Venezuela.'
+                        : 'Se conserva el número original. Totales con el IVA actual al guardar.',
+                  ),
                 ),
-              ),
-              ListTile(
-                title: Text(
-                  'Fecha: ${date.toIso8601String().substring(0, 10)}',
-                ),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: () async {
-                  final selected = await showDatePicker(
-                    context: context,
-                    initialDate: date,
-                    firstDate: DateTime(2000),
-                    lastDate: DateTime(2100),
-                  );
-                  if (selected != null && mounted) {
-                    setState(() => date = selected);
-                  }
-                },
-              ),
-              ListTile(
-                title: Text(client?.name ?? 'Seleccionar cliente'),
-                subtitle: Text(client?.rif ?? ''),
-                trailing: const Icon(Icons.person_search),
-                onTap: () async {
-                  final raw = await pickEntity(context, ref, 'clients');
-                  if (raw != null && mounted) {
-                    setState(() => client = Client.fromJson(raw));
-                  }
-                },
-              ),
-              const Divider(),
-              for (var i = 0; i < lines.length; i++)
                 ListTile(
+                  title: Text(
+                    'Fecha: ${date.toIso8601String().substring(0, 10)}',
+                  ),
+                  trailing: const Icon(Icons.calendar_today),
                   onTap: () async {
-                    final edited = await showDialog<DraftLine>(
+                    final selected = await showDatePicker(
                       context: context,
-                      builder: (_) => LineDialog(
-                        product: lines[i].product,
-                        budget: widget.budget,
-                        initial: lines[i],
-                      ),
+                      initialDate: date,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
                     );
-                    if (edited != null && mounted) {
-                      setState(() => lines[i] = edited);
+                    if (selected != null && mounted) {
+                      setState(() => date = selected);
                     }
                   },
-                  title: Text('${lines[i].description} × ${lines[i].quantity}'),
-                  subtitle: Text(
-                    '${money(lines[i].total)} · ${lines[i].serials.join(', ')}',
+                ),
+                ListTile(
+                  title: Text(client?.name ?? 'Seleccionar cliente'),
+                  subtitle: Text(client?.rif ?? ''),
+                  trailing: const Icon(Icons.person_search),
+                  onTap: () async {
+                    final raw = await pickEntity(context, ref, 'clients');
+                    if (raw != null && mounted) {
+                      setState(() => client = Client.fromJson(raw));
+                    }
+                  },
+                ),
+                const Divider(),
+                for (var i = 0; i < lines.length; i++)
+                  ListTile(
+                    onTap: () async {
+                      final edited = await showDialog<DraftLine>(
+                        context: context,
+                        builder: (_) => LineDialog(
+                          product: lines[i].product,
+                          budget: widget.budget,
+                          initial: lines[i],
+                        ),
+                      );
+                      if (edited != null && mounted) {
+                        setState(() => lines[i] = edited);
+                      }
+                    },
+                    title: Text(
+                      '${lines[i].description} × ${lines[i].quantity}',
+                    ),
+                    subtitle: Text(
+                      '${money(lines[i].total)} · ${lines[i].serials.join(', ')}',
+                    ),
+                    trailing: IconButton(
+                      tooltip: 'Quitar producto',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => setState(() => lines.removeAt(i)),
+                    ),
                   ),
-                  trailing: IconButton(
-                    tooltip: 'Quitar producto',
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => setState(() => lines.removeAt(i)),
+                OutlinedButton.icon(
+                  onPressed: addLine,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Agregar producto'),
+                ),
+                SwitchListTile(
+                  title: Text('Aplicar IVA (${money(rateBps)} %)'),
+                  value: applyIva,
+                  onChanged: (value) => setState(() => applyIva = value),
+                ),
+                Text(
+                  'Subtotal: ${money(subtotal)}\nIVA: ${money(iva)}\nTotal estimado: ${money(subtotal + iva)}',
+                ),
+                TextField(
+                  controller: observations,
+                  maxLines: 3,
+                  decoration: const InputDecoration(labelText: 'Observaciones'),
+                ),
+                if (!widget.budget)
+                  TextField(
+                    controller: delivered,
+                    decoration: const InputDecoration(
+                      labelText: 'Entregado por',
+                    ),
+                  ),
+                if (!widget.budget)
+                  TextField(
+                    controller: received,
+                    decoration: const InputDecoration(
+                      labelText: 'Recibido por',
+                    ),
+                  ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: save,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(64),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 20,
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  icon: const Icon(Icons.save_outlined, size: 26),
+                  label: Text(
+                    busy
+                        ? 'Guardando…'
+                        : widget.id != null
+                        ? 'Guardar cambios'
+                        : widget.budget
+                        ? 'Crear presupuesto'
+                        : 'Crear nota',
                   ),
                 ),
-              OutlinedButton.icon(
-                onPressed: addLine,
-                icon: const Icon(Icons.add),
-                label: const Text('Agregar producto'),
-              ),
-              SwitchListTile(
-                title: Text('Aplicar IVA (${money(rateBps)} %)'),
-                value: applyIva,
-                onChanged: (value) => setState(() => applyIva = value),
-              ),
-              Text(
-                'Subtotal: ${money(subtotal)}\nIVA: ${money(iva)}\nTotal estimado: ${money(subtotal + iva)}',
-              ),
-              TextField(
-                controller: observations,
-                maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Observaciones'),
-              ),
-              if (!widget.budget)
-                TextField(
-                  controller: delivered,
-                  decoration: const InputDecoration(labelText: 'Entregado por'),
-                ),
-              if (!widget.budget)
-                TextField(
-                  controller: received,
-                  decoration: const InputDecoration(labelText: 'Recibido por'),
-                ),
-              const SizedBox(height: 24),
-              FilledButton(
-                onPressed: save,
-                child: Text(
-                  busy
-                      ? 'Guardando…'
-                      : widget.id != null
-                      ? 'Guardar cambios'
-                      : widget.budget
-                      ? 'Crear presupuesto'
-                      : 'Crear nota',
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
