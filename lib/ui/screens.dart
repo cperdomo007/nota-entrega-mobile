@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 
 import '../main.dart';
 import '../data/note_pdf.dart';
+import '../data/commercial_pdf.dart';
 import '../domain/models.dart';
 import 'scanner.dart';
 import 'application_branding.dart';
@@ -242,6 +243,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           'clients': 'Clientes',
           'products': 'Productos',
           'notes': 'Notas de entrega',
+          'budgets': 'Presupuestos',
         }.entries)
           Card(
             child: ListTile(
@@ -320,6 +322,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
           'clients': 'Clientes',
           'products': 'Productos',
           'notes': 'Notas de entrega',
+          'budgets': 'Presupuestos',
         }[widget.kind]!,
       ),
     ),
@@ -387,17 +390,19 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                   const ListTile(title: Text('Sin resultados')),
                 for (final item in items)
                   ListTile(
-                    title: Text('${item['name'] ?? item['noteNumber']}'),
+                    title: Text(
+                      '${item['name'] ?? item['noteNumber'] ?? item['budgetNumber']}',
+                    ),
                     subtitle: Text(
-                      widget.kind == 'notes'
-                          ? '${item['clientName']} · ${item['noteDate']} · ${item['total']}'
+                      widget.kind == 'notes' || widget.kind == 'budgets'
+                          ? '${item['clientName']} · ${item['noteDate'] ?? item['budgetDate']} · ${item['total']}'
                           : widget.kind == 'clients'
                           ? '${item['rif'] ?? ''} · ${item['phone'] ?? ''}'
                           : '${item['barcode'] ?? ''} · ${item['price']} / ${item['unit'] ?? 'UN'}',
                     ),
-                    onTap: widget.kind == 'notes'
+                    onTap: widget.kind == 'notes' || widget.kind == 'budgets'
                         ? () async {
-                            await context.push('/notes/${item['id']}');
+                            await context.push('/${widget.kind}/${item['id']}');
                             if (mounted) load(reset: true);
                           }
                         : null,
@@ -467,7 +472,7 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
             for (final line in note.lines)
               ListTile(
                 title: Text(
-                  '${line['productName'] ?? line['productId']} × ${line['quantity']}',
+                  '${documentLineDescription(line, budget: false)} × ${line['quantity']}',
                 ),
                 subtitle: Text(
                   'Precio: ${line['unitPrice']}\nSeriales: ${(line['serials'] as List? ?? []).join(', ')}',

@@ -21,13 +21,17 @@ Todas las rutas siguientes requieren `Authorization: Bearer <accessToken>`. Se c
 | GET notes?q=&limit=50&offset=0 | `{items:[{id,noteNumber,noteDate,clientName,subtotal,ivaAmount,total,applyIVA}]}` |
 | GET config | `{businessName,ivaRate}` |
 | GET notes/next-number | `{noteNumber}` sugerencia NE-000001, no reserva |
-| GET notes/:id | Cabecera, companyName y lines con productName/serials como strings |
+| GET notes/:id | Cabecera, companyName, company y lines con productName/serials como strings |
+| GET budgets?q=&limit=50&offset=0 | `{items:[{id,budgetNumber,budgetDate,clientName,subtotal,ivaAmount,total,applyIVA}]}` |
+| GET budgets/:id | Cabecera, company y lines con description persistida, quantity, unitPrice y lineTotal |
 | POST notes | 201 `{id,noteNumber?}` |
 | GET users | Solo admin; `{items:[{id,email,name,role,active}]}` paginado |
 | POST users | Solo admin; `{email,name,password,role}` → 201 usuario sin hash |
 | PATCH users/:id | Solo admin; `{active:boolean}` → 204; desactivar revoca sesiones |
 
 No se permite desactivar la propia cuenta. No hay endpoint público de registro. Para crear el primer administrador se usa el comando del servidor documentado en RAILWAY.md.
+
+`company` contiene `{businessName,rif,address,phone1,phone2,email,website}` de `company_config` para la cabecera fiscal de los PDF. No contiene credenciales SQL. Presupuestos es una consulta de `budgets`/`budget_lines`; no hay POST/PATCH/DELETE ni migraciones nuevas. Se conserva la descripción histórica incluso si la línea no tiene producto asociado. Los IDs siguen en JSON para relacionar datos; Flutter no los imprime como descripción ni muestra una columna de código en los PDF.
 
 Búsqueda por nombre/RIF, nombre/código y número/cliente. Limit 1–50, offset>=0, orden id descendente; comodines escapados. hasSerial/applyIVA booleanos; datos de la misma empresa compartidos para todas las cuentas activas.
 

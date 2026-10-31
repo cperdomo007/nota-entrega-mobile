@@ -17,7 +17,8 @@ test('MySQL authentication, rotation, permissions, shared data and atomic note i
     const suffix=token().slice(0,10), email=`admin-${suffix}@example.com`, password='Test-password-123!';
     const [user]=await pool.execute('INSERT INTO mobile_users (email,name,passwordHash,role) VALUES (?,?,?,?)',[email,'Test',await hashPassword(password),'admin']);
     const [product]=await pool.query('INSERT INTO products (name,price,hasSerial,unit) VALUES (?,?,?,?)',['Test Router','100.25',true,'UN']);
-    await pool.query('INSERT INTO company_config (businessName,ivaRate) SELECT ?,? WHERE NOT EXISTS (SELECT 1 FROM company_config)',['Test Company','16.00']);
+    await pool.query('INSERT INTO company_config (businessName,ivaRate,rif,address,phone1,email,website) SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM company_config)',
+      ['Test Company','16.00','J-00000000-0','Test Address','000-0000','test@example.com','https://example.com']);
     const app=await createApp(pool,{requireHttps:false});
     server=app.listen(0,'127.0.0.1'); await new Promise(resolve=>server.once('listening',resolve));
     const base=`http://127.0.0.1:${server.address().port}/api/mobile/v1/`;
@@ -44,6 +45,25 @@ test('MySQL authentication, rotation, permissions, shared data and atomic note i
     const detail=(await request(`notes/${one.body.id}`,{access})).body;
     assert.equal(detail.subtotal,'100.25'); assert.equal(detail.ivaAmount,'16.04'); assert.equal(detail.total,'116.29');
     assert.deepEqual(detail.lines[0].serials,['SERIAL-'+suffix]);
+    assert.equal(detail.company.businessName,'Test Company');
+    assert.equal(detail.company.rif,'J-00000000-0'); assert.equal(detail.company.address,'Test Address');
+    // A historical/manual budget line must not depend on a current product.
+    const [budget]=await pool.execute('INSERT INTO budgets (budgetNumber,budgetDate,clientName,subtotal,applyIVA,ivaAmount,total,observations) VALUES (?,?,?,?,?,?,?,?)',
+      [`BUDGET-${suffix}`,'2026-10-30','Budget Client','100.25',false,'0.00','100.25','Test terms']);
+    await pool.execute('INSERT INTO budget_lines (budgetId,productId,description,quantity,unitPrice,lineTotal) VALUES (?,?,?,?,?,?)',
+      [budget.insertId,null,'Historical manual description',1,'100.25','100.25']);
+    const budgetList=await request(`budgets?q=${encodeURIComponent(suffix)}`,{access});
+    assert.equal(budgetList.status,200);
+    assert(budgetList.body.items.some(b=>b.id===budget.insertId && b.applyIVA===false));
+    const quote=await request(`budgets/${budget.insertId}`,{access});
+    assert.equal(quote.status,200); assert.equal(quote.body.company.businessName,'Test Company');
+    assert.equal(quote.body.company.email,'test@example.com');
+    assert.equal(quote.body.total,'100.25'); assert.equal(quote.body.applyIVA,false);
+    assert.equal(quote.body.lines[0].description,'Historical manual description');
+    assert.equal(quote.body.lines[0].productId,null);
+    assert.equal((await request('budgets/0',{access})).status,422);
+    assert.equal((await request('budgets/2147483647',{access})).status,404);
+    assert.equal((await request('budgets',{method:'POST',access,data:{}})).status,404);
     const [[count]]=await pool.execute('SELECT COUNT(*) AS count FROM delivery_notes WHERE noteNumber=?',[input.noteNumber]);
     assert.equal(count.count,1);
     assert.equal((await request('notes',{method:'POST',access,key,data:{...input,clientName:'Changed'}})).status,409);

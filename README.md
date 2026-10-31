@@ -13,7 +13,7 @@ Flutter no contiene acceso directo a MySQL ni credenciales de BD. La única vari
 
 ## Servidor y datos compartidos
 
-`backend/` implementa autenticación, sesiones revocables, administración de usuarios y el contrato de datos de clientes/productos/notas. Se conecta a la BD de la web desde el servidor. Consultar [despliegue Railway](docs/RAILWAY.md) y [contrato API](docs/API.md).
+`backend/` implementa autenticación, sesiones revocables, administración de usuarios y el contrato de datos de clientes/productos/notas/presupuestos. Se conecta a la BD de la web desde el servidor. Consultar [despliegue Railway](docs/RAILWAY.md) y [contrato API](docs/API.md).
 
 La migración agrega exclusivamente `mobile_users`, `mobile_sessions` y `mobile_note_requests`. No altera `users` ni las tablas de negocio existentes. No se ejecutan migraciones desde Flutter. El primer administrador y su contraseña se establecen privadamente mediante el comando de creación de usuario. No existe registro público ni una contraseña predeterminada.
 
@@ -24,7 +24,8 @@ Las sesiones usan access tokens aleatorios de 15 minutos en memoria, refresh tok
 - Inicio de sesión con correo/contraseña y recuperación de sesión.
 - Dashboard, clientes y productos con búsqueda/paginación.
 - Listado, creación y detalle de notas; seriales manuales y cámara.
-- PDF A4 multipágina con fuentes incluidas y selector nativo para compartir.
+- Consulta y búsqueda de presupuestos existentes en la web; detalle y PDF compartido. Sin creación ni edición de presupuestos desde el móvil.
+- PDF A4 de Presupuesto y Nota de Entrega según los formatos facilitados, con logo, datos fiscales, cliente, observaciones y totales; firmas en notas. Sin códigos de producto en las líneas, conservando los seriales. Fuentes incluidas y soporte multipágina. Ver [formatos PDF](docs/PDF_FORMATS.md).
 - API: creación/desactivación de usuarios solo por administradores; cuentas desactivadas pierden acceso y sesiones.
 
 Todos los usuarios activos pertenecen a la misma empresa y comparten su catálogo y notas; no hay aislamiento multiempresa. Los totales definitivos se calculan en el servidor según el IVA configurado. El precio unitario es editable por usuarios autorizados a crear notas, como en la web. No se agrega descuento automático de stock.
@@ -36,6 +37,8 @@ Todos los usuarios activos pertenecen a la misma empresa y comparten su catálog
 En `backend/`: `npm ci`, `npm test`. La integración usa `TEST_DATABASE_URL` exclusivamente con una base descartable cuyo nombre termine en `_test`: `npm run test:integration`. Nunca ejecutar fixtures de prueba sobre Railway producción.
 
 GitHub Actions analiza y prueba Flutter, compila APK debug con config/env.production.json, prueba el backend con MySQL 8.4 aislado y construye su Dockerfile. Consultar el resultado de la ejecución del commit correspondiente; no confundir APKs anteriores con el nuevo login.
+
+Las pruebas Flutter exportan seis documentos ficticios en `build/pdf-preview/`. Para comprobar su texto real: `python -m pip install pypdf==6.10.0` y `python tool/verify_pdf.py`. CI verifica formatos, importes, IVA, paginación y seriales; rechaza códigos/IDs de producto impresos. Publica dos ejemplos ficticios como `pdf-format-previews`. Los PDF de clientes facilitados como referencia no forman parte del repositorio.
 
 ## Estado
 

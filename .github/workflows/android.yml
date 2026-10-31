@@ -29,6 +29,11 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter analyze
       - run: flutter test --coverage
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install pypdf==6.10.0
+      - run: python tool/verify_pdf.py
       - run: flutter build apk --debug --dart-define-from-file=config/env.production.json
       - uses: actions/upload-artifact@v4
         with:
@@ -39,6 +44,13 @@ jobs:
         with:
           name: coverage
           path: coverage/lcov.info
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdf-format-previews
+          path: |
+            build/pdf-preview/nota-entrega.pdf
+            build/pdf-preview/presupuesto.pdf
+          if-no-files-found: error
   backend:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

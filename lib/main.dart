@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'core/session.dart';
 import 'data/api.dart';
 import 'ui/screens.dart';
+import 'ui/budget_screen.dart';
 
 final sessionProvider = Provider<Session>((ref) => throw UnimplementedError());
 final apiProvider = Provider<Api>((ref) {
@@ -49,7 +50,7 @@ class _NotaEntregaAppState extends ConsumerState<NotaEntregaApp> {
       routes: [
         GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
         GoRoute(path: '/', builder: (_, _) => const DashboardScreen()),
-        for (final kind in ['clients', 'products', 'notes'])
+        for (final kind in ['clients', 'products', 'notes', 'budgets'])
           GoRoute(
             path: '/$kind',
             builder: (_, _) => CatalogScreen(kind: kind),
@@ -62,6 +63,11 @@ class _NotaEntregaAppState extends ConsumerState<NotaEntregaApp> {
           path: '/notes/:id',
           builder: (_, state) =>
               NoteScreen(id: int.tryParse(state.pathParameters['id']!) ?? -1),
+        ),
+        GoRoute(
+          path: '/budgets/:id',
+          builder: (_, state) =>
+              BudgetScreen(id: int.tryParse(state.pathParameters['id']!) ?? -1),
         ),
       ],
     );

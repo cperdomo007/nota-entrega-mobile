@@ -1,4 +1,15 @@
-# Validación: login por correo y API MySQL
+# Validación 0.3.0+5: formatos PDF
+
+- `flutter analyze --no-pub`: sin incidencias.
+- `flutter test --no-pub --coverage`: 20 pruebas aprobadas; incluye buscar/abrir presupuestos y exportar ambas plantillas.
+- `python tool/verify_pdf.py` con pypdf 6.10.0: seis PDF reales de Flutter verificados. Confirma importes, fechas, datos fiscales, firmas, ausencia de códigos/IDs, caso sin IVA y conservación de todos los seriales en documentos multipágina.
+- PDF de muestra A4 renderizados con Poppler y revisados visualmente; también páginas de continuación y cierre del caso de 500 seriales. Muestras con datos ficticios, sin publicar los PDF originales de clientes.
+- Backend: cuatro pruebas de seguridad locales aprobadas, incluyendo presupuestos/listado y detalle sin sesión → 401.
+- La integración MySQL aislada agrega consulta/búsqueda/detalle de presupuestos históricos y cabecera fiscal. Se ejecuta en CI, junto a Docker y la compilación APK de esta versión; consultar el run asociado al commit publicado para su resultado.
+
+Nuevas consultas del backend sin cambios en migraciones ni esquema de producción. Presupuestos es solo lectura; datos existentes de la web. No se ejecutaron fixtures ni escrituras de negocio de prueba en producción. En un teléfono siguen pendientes login, cámara/permisos y selector nativo de compartir. Firma release no configurada.
+
+## Historial: login por correo y API MySQL (0.2.x)
 
 Flutter 3.47.9 / Dart 3.13.7; Node 22. Commit de código verificado: `6d3b072f3c0c7fbc23f237afc70f99504c1365ec`.
 

@@ -111,6 +111,7 @@ export async function createApp(pool, { requireHttps = true } = {}) {
     ['clients','clients','id,name,rif,address,phone,email,contact','name LIKE ? OR rif LIKE ?'],
     ['products','products','id,name,barcode,description,category,price,unit,hasSerial,stock','name LIKE ? OR barcode LIKE ?'],
     ['notes','delivery_notes','id,noteNumber,noteDate,clientName,subtotal,ivaAmount,total,applyIVA','noteNumber LIKE ? OR clientName LIKE ?'],
+    ['budgets','budgets','id,budgetNumber,budgetDate,clientName,subtotal,ivaAmount,total,applyIVA','budgetNumber LIKE ? OR clientName LIKE ?'],
   ]) routes.get(`/${path}`,async(req,res) => {
     const {q,limit,offset} = pageSchema.parse(req.query);
     const search = `%${q.replaceAll('!','!!').replaceAll('%','!%').replaceAll('_','!_')}%`;
@@ -128,8 +129,17 @@ export async function createApp(pool, { requireHttps = true } = {}) {
     if (!note) throw fail(404,'Nota no encontrada');
     const [lines] = await pool.execute('SELECT l.*,p.name AS productName FROM note_lines l LEFT JOIN products p ON p.id=l.productId WHERE l.noteId=? ORDER BY l.id',[id]);
     const [serials] = await pool.execute('SELECT s.lineId,s.serial FROM serials s JOIN note_lines l ON l.id=s.lineId WHERE l.noteId=? ORDER BY s.id',[id]);
-    const [[company]] = await pool.query('SELECT businessName FROM company_config ORDER BY id LIMIT 1');
-    res.json({...note,applyIVA:!!note.applyIVA,companyName:company?.businessName || '',lines:lines.map(l => ({...l,serials:serials.filter(s=>s.lineId===l.id).map(s=>s.serial)}))});
+    const [[company]] = await pool.query('SELECT businessName,rif,address,phone1,phone2,email,website FROM company_config ORDER BY id LIMIT 1');
+    res.json({...note,applyIVA:!!note.applyIVA,company:company || {},companyName:company?.businessName || '',lines:lines.map(l => ({...l,serials:serials.filter(s=>s.lineId===l.id).map(s=>s.serial)}))});
+  });
+  // Budgets are read-only: amounts/descriptions come from the shared web data.
+  routes.get('/budgets/:id',async(req,res) => {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const [[budget]] = await pool.execute('SELECT * FROM budgets WHERE id=?',[id]);
+    if (!budget) throw fail(404,'Presupuesto no encontrado');
+    const [lines] = await pool.execute('SELECT * FROM budget_lines WHERE budgetId=? ORDER BY id',[id]);
+    const [[company]] = await pool.query('SELECT businessName,rif,address,phone1,phone2,email,website FROM company_config ORDER BY id LIMIT 1');
+    res.json({...budget,applyIVA:!!budget.applyIVA,company:company || {},lines});
   });
   routes.post('/notes',async(req,res) => {
     const input = noteSchema.parse(req.body);

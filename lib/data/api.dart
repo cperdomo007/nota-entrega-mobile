@@ -54,6 +54,7 @@ class Api {
           .cast<Json>();
   Future<DeliveryNote> note(int id) async =>
       DeliveryNote(await get('notes/$id'));
+  Future<Budget> budget(int id) async => Budget(await get('budgets/$id'));
   Future<int> create(Json draft, String idempotencyKey) async =>
       (await dio.post<Json>(
             'notes',

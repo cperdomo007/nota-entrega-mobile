@@ -98,3 +98,12 @@ class DeliveryNote {
   String get client => data['clientName'] as String;
   List<Json> get lines => (data['lines'] as List? ?? []).cast<Json>();
 }
+
+class Budget {
+  final Json data;
+  Budget(this.data);
+  int get id => data['id'] as int;
+  String get number => data['budgetNumber'] as String;
+  String get client => data['clientName'] as String;
+  List<Json> get lines => (data['lines'] as List? ?? []).cast<Json>();
+}
