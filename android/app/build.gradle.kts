@@ -31,9 +31,9 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Release signing is intentionally not configured.
-            // Configure release signing through your approved distribution process.
+            // Installable optimized TEST builds. This is not a production
+            // signing identity; Play Store distribution needs an approved key.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }

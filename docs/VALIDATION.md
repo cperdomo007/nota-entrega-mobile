@@ -1,3 +1,11 @@
+# Validación 0.4.1+7: distribución optimizada
+
+La versión 0.4.0+6 con altas y creación de presupuestos pasó CI: https://github.com/cperdomo007/nota-entrega-mobile/actions/runs/41155733557 (commit 2780b84fc719ce1567ac6192f5246e926d093bab). Incluye 23 pruebas Flutter, seis del backend, integración MySQL aislada, seis PDF verificados, Docker y compilación Android debug.
+
+0.4.1+7 conserva esas funciones y cambia el empaquetado a release por arquitectura, con firma de prueba para instalación. El workflow verifica la estructura AOT/ABI, firma, permiso INTERNET y debuggable=false, y mide los tamaños reales en apk-sizes.json. Consultar el run del commit publicado para el resultado de esta compilación. No hay cambios del backend ni del esquema por esta optimización. Pendientes: pruebas en teléfono y firma de producción.
+
+## Historial de funcionalidades
+
 # Validación 0.4.0+6: altas y numeración
 
 - Análisis Flutter sin incidencias; 23 pruebas aprobadas. Nuevos flujos: alta de cliente, alta de producto con control de serial, creación de presupuesto con descripción editable y número de vista previa de solo lectura.

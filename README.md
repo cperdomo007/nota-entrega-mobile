@@ -38,10 +38,19 @@ Desde 0.4.0+6, notas y presupuestos reciben al guardar un número DDMMAAAAHHMM c
 
 En `backend/`: `npm ci`, `npm test`. La integración usa `TEST_DATABASE_URL` exclusivamente con una base descartable cuyo nombre termine en `_test`: `npm run test:integration`. Nunca ejecutar fixtures de prueba sobre Railway producción.
 
-GitHub Actions analiza y prueba Flutter, compila APK debug con config/env.production.json, prueba el backend con MySQL 8.4 aislado y construye su Dockerfile. Consultar el resultado de la ejecución del commit correspondiente; no confundir APKs anteriores con el nuevo login.
+GitHub Actions analiza y prueba Flutter, compila APK optimizados por arquitectura con config/env.production.json, prueba el backend con MySQL 8.4 aislado y construye su Dockerfile. Consultar el resultado de la ejecución del commit correspondiente; no confundir APKs anteriores con el nuevo login.
 
 Las pruebas Flutter exportan seis documentos ficticios en `build/pdf-preview/`. Para comprobar su texto real: `python -m pip install pypdf==6.10.0` y `python tool/verify_pdf.py`. CI verifica formatos, importes, IVA, paginación y seriales; rechaza códigos/IDs de producto impresos. Publica dos ejemplos ficticios como `pdf-format-previews`. Los PDF de clientes facilitados como referencia no forman parte del repositorio.
 
 ## Estado
 
-Ver `docs/VALIDATION.md`. La API y la migración ya fueron desplegadas en Railway con autorización. La API está publicada por HTTPS con autorización expresa del propietario y el APK se configura con esa URL. Las rutas de datos exigen sesión; la conexión del backend a MySQL continúa usando la red privada de Railway. El propietario confirmó el alta del administrador y la contraseña se estableció fuera del chat. El login de producción en un teléfono todavía requiere comprobación manual. Pendientes de verificación en dispositivo: cámara/permisos, compartir PDF y revisión visual. Firma/distribución release no configuradas.
+Ver `docs/VALIDATION.md`. La API y la migración ya fueron desplegadas en Railway con autorización. La API está publicada por HTTPS con autorización expresa del propietario y el APK se configura con esa URL. Las rutas de datos exigen sesión; la conexión del backend a MySQL continúa usando la red privada de Railway. El propietario confirmó el alta del administrador y la contraseña se estableció fuera del chat. El login de producción en un teléfono todavía requiere comprobación manual. Pendientes de verificación en dispositivo: cámara/permisos, compartir PDF y revisión visual. La compilación optimizada usa firma de prueba; firma de producción y distribución en Play Store pendientes.
+
+
+## Descargas optimizadas (0.4.1+7)
+
+CI ejecuta `flutter build apk --release --split-per-abi --dart-define-from-file=config/env.production.json`. Cada descarga contiene únicamente las bibliotecas de una arquitectura: `nota-entrega-optimized-arm64` (ARM 64 bits), `nota-entrega-optimized-arm32` (ARM 32 bits) o `nota-entrega-optimized-x86_64` (x86 de 64 bits). No instalar las tres: elegir la correspondiente al dispositivo. Los modos release activan las optimizaciones de Dart y el SDK Flutter configura minificación/recorte de recursos. Se conservan cámara, PDF, fuentes y logo.
+
+Estos APK son instalables y optimizados para pruebas, firmados con la clave debug del runner; no representan una firma de producción ni se publican en Play Store. La identidad de esa clave puede cambiar entre ejecuciones de CI, como en los APK debug anteriores. La firma de producción requiere configuración aparte.
+
+`tool/apk_report.py` verifica una única ABI, código AOT y ausencia del kernel debug en cada archivo, mide los bytes reales y publica `apk-size-report` y una tabla en el resumen de CI. CI verifica además las firmas, que debuggable=false y el permiso INTERNET en los APK finales. No afirmar tamaño ni compilación exitosa hasta verificar el run correspondiente.
