@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'package:dio/dio.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -49,11 +51,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => busy = true);
     try {
       await ref.read(sessionProvider).signIn(email.text, password.text);
-    } catch (_) {
+    } catch (failure) {
       if (mounted) {
+        final incorrect =
+            failure is DioException && failure.response?.statusCode == 401;
+        if (incorrect) {
+          email.clear();
+          password.clear();
+          setState(() => visible = false);
+        }
         showError(
           context,
-          'No se pudo acceder. Revisa correo, contraseña y conexión.',
+          incorrect
+              ? 'Usuario o contraseña incorrectos. Vuelve a intentarlo.'
+              : 'No se pudo acceder. Revisa la conexión y vuelve a intentarlo.',
         );
       }
     } finally {
@@ -214,9 +225,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 title: const Text('No se pudo cargar el resumen'),
                 trailing: IconButton(
                   icon: const Icon(Icons.refresh),
-                  onPressed: () => setState(
-                    () => future = ref.read(apiProvider).get('dashboard'),
-                  ),
+                  onPressed: () => setState(() {
+                    future = ref.read(apiProvider).get('dashboard');
+                  }),
                 ),
               );
             }
@@ -411,7 +422,12 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                             await context.push('/${widget.kind}/${item['id']}');
                             if (mounted) load(reset: true);
                           }
-                        : null,
+                        : () async {
+                            await context.push(
+                              '/${widget.kind}/${item['id']}/edit',
+                            );
+                            if (mounted) load(reset: true);
+                          },
                   ),
                 if (more && items.isNotEmpty)
                   TextButton(
@@ -445,16 +461,32 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Detalle de nota')),
+    appBar: AppBar(
+      title: const Text('Detalle de nota'),
+      actions: [
+        IconButton(
+          tooltip: 'Editar nota',
+          icon: const Icon(Icons.edit),
+          onPressed: () async {
+            await context.push('/notes/${widget.id}/edit');
+            if (mounted) {
+              setState(() {
+                future = ref.read(apiProvider).note(widget.id);
+              });
+            }
+          },
+        ),
+      ],
+    ),
     body: FutureBuilder<DeliveryNote>(
       future: future,
       builder: (_, snapshot) {
         if (snapshot.hasError) {
           return Center(
             child: TextButton(
-              onPressed: () => setState(
-                () => future = ref.read(apiProvider).note(widget.id),
-              ),
+              onPressed: () => setState(() {
+                future = ref.read(apiProvider).note(widget.id);
+              }),
               child: const Text('No se pudo cargar. Reintentar'),
             ),
           );
@@ -528,13 +560,15 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 
 class CreateNoteScreen extends ConsumerStatefulWidget {
   final bool budget;
-  const CreateNoteScreen({super.key, this.budget = false});
+  final int? id;
+  const CreateNoteScreen({super.key, this.budget = false, this.id});
   @override
   ConsumerState<CreateNoteScreen> createState() => _CreateNoteScreenState();
 }
 
 class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
   String get kind => widget.budget ? 'budgets' : 'notes';
+  String? version;
   final number = TextEditingController(),
       observations = TextEditingController();
   final delivered = TextEditingController(), received = TextEditingController();
@@ -557,9 +591,53 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
   Future<void> initialize() async {
     final api = ref.read(apiProvider);
     final config = await api.get('config');
-    final next = await api.get('$kind/next-number');
     rateBps = cents(config['ivaRate'] ?? '16.00');
-    number.text = next[widget.budget ? 'budgetNumber' : 'noteNumber'] as String;
+    if (widget.id == null) {
+      final next = await api.get('$kind/next-number');
+      number.text =
+          next[widget.budget ? 'budgetNumber' : 'noteNumber'] as String;
+    } else {
+      final data = await api.get('$kind/${widget.id}');
+      version = data['_version'] as String;
+      number.text =
+          data[widget.budget ? 'budgetNumber' : 'noteNumber'] as String;
+      date = DateTime.parse(
+        data[widget.budget ? 'budgetDate' : 'noteDate'] as String,
+      );
+      client = Client(
+        0,
+        data['clientName'] as String,
+        '${data['clientRif'] ?? ''}',
+        '${data['clientAddress'] ?? ''}',
+        '${data['clientPhone'] ?? ''}',
+        '${data['clientContact'] ?? ''}',
+      );
+      applyIva = data['applyIVA'] == true;
+      observations.text = '${data['observations'] ?? ''}';
+      delivered.text = '${data['deliveredBy'] ?? ''}';
+      received.text = '${data['receivedBy'] ?? ''}';
+      lines.clear();
+      for (final raw in (data['lines'] as List).cast<Json>()) {
+        final serials = (raw['serials'] as List? ?? []).cast<String>();
+        final product = Product(
+          raw['productId'] as int? ?? 0,
+          '${raw[widget.budget ? 'description' : 'productName'] ?? 'Producto sin descripción'}',
+          cents(raw['unitPrice']),
+          '',
+          '${raw['unit'] ?? 'UN'}',
+          !widget.budget && (raw['hasSerial'] as bool? ?? serials.isNotEmpty),
+        );
+        lines.add(
+          DraftLine(
+            product,
+            raw['quantity'] as int,
+            cents(raw['unitPrice']),
+            serials,
+            description: widget.budget ? raw['description'] as String : null,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -611,7 +689,7 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
             .map(
               (l) => widget.budget
                   ? {
-                      'productId': l.product.id,
+                      'productId': l.product.id == 0 ? null : l.product.id,
                       'description': l.description,
                       'quantity': l.quantity,
                       'unitPrice': money(l.priceCents),
@@ -621,10 +699,18 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
             .toList(),
       };
       final api = ref.read(apiProvider);
-      final id = widget.budget
-          ? await api.createEntity(kind, payload, key)
-          : await api.create(payload, key);
-      if (mounted) context.pushReplacement('/$kind/$id');
+      if (widget.id != null) {
+        await api.updateEntity(kind, widget.id!, {
+          ...payload,
+          '_version': version,
+        }, key);
+        if (mounted) context.pop(true);
+      } else {
+        final id = widget.budget
+            ? await api.createEntity(kind, payload, key)
+            : await api.create(payload, key);
+        if (mounted) context.pushReplacement('/$kind/$id');
+      }
     } catch (failure) {
       if (mounted) {
         showError(
@@ -643,7 +729,11 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: Text(widget.budget ? 'Nuevo presupuesto' : 'Nueva nota'),
+      title: Text(
+        widget.id != null
+            ? (widget.budget ? 'Editar presupuesto' : 'Editar nota')
+            : (widget.budget ? 'Nuevo presupuesto' : 'Nueva nota'),
+      ),
     ),
     body: FutureBuilder<void>(
       future: setup,
@@ -651,7 +741,9 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
         if (snapshot.hasError) {
           return Center(
             child: TextButton(
-              onPressed: () => setState(() => setup = initialize()),
+              onPressed: () => setState(() {
+                setup = initialize();
+              }),
               child: const Text(
                 'No se pudo cargar la configuración. Reintentar',
               ),
@@ -671,9 +763,11 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
               TextField(
                 controller: number,
                 readOnly: true,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Número (DDMMAAAAHHMM)',
-                  helperText: 'Vista previa. Se asigna al guardar con la hora de Venezuela.',
+                  helperText: widget.id == null
+                      ? 'Vista previa. Se asigna al guardar con la hora de Venezuela.'
+                      : 'Se conserva el número original. Totales con el IVA actual al guardar.',
                 ),
               ),
               ListTile(
@@ -707,6 +801,19 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
               const Divider(),
               for (var i = 0; i < lines.length; i++)
                 ListTile(
+                  onTap: () async {
+                    final edited = await showDialog<DraftLine>(
+                      context: context,
+                      builder: (_) => LineDialog(
+                        product: lines[i].product,
+                        budget: widget.budget,
+                        initial: lines[i],
+                      ),
+                    );
+                    if (edited != null && mounted) {
+                      setState(() => lines[i] = edited);
+                    }
+                  },
                   title: Text('${lines[i].description} × ${lines[i].quantity}'),
                   subtitle: Text(
                     '${money(lines[i].total)} · ${lines[i].serials.join(', ')}',
@@ -751,6 +858,8 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                 child: Text(
                   busy
                       ? 'Guardando…'
+                      : widget.id != null
+                      ? 'Guardar cambios'
                       : widget.budget
                       ? 'Crear presupuesto'
                       : 'Crear nota',
@@ -900,19 +1009,29 @@ class _EntityPickerState extends ConsumerState<EntityPicker> {
 class LineDialog extends StatefulWidget {
   final Product product;
   final bool budget;
-  const LineDialog({super.key, required this.product, this.budget = false});
+  final DraftLine? initial;
+  const LineDialog({
+    super.key,
+    required this.product,
+    this.budget = false,
+    this.initial,
+  });
   @override
   State<LineDialog> createState() => _LineDialogState();
 }
 
 class _LineDialogState extends State<LineDialog> {
-  final quantity = TextEditingController(text: '1'),
-      serial = TextEditingController();
-  late final price = TextEditingController(
-    text: money(widget.product.priceCents),
+  late final quantity = TextEditingController(
+    text: '${widget.initial?.quantity ?? 1}',
   );
-  late final description = TextEditingController(text: widget.product.name);
-  final serials = <String>[];
+  final serial = TextEditingController();
+  late final price = TextEditingController(
+    text: money(widget.initial?.priceCents ?? widget.product.priceCents),
+  );
+  late final description = TextEditingController(
+    text: widget.initial?.description ?? widget.product.name,
+  );
+  late final serials = <String>[...?widget.initial?.serials];
   String? error;
   @override
   void dispose() {

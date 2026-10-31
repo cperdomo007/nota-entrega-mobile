@@ -55,6 +55,14 @@ class Api {
   Future<DeliveryNote> note(int id) async =>
       DeliveryNote(await get('notes/$id'));
   Future<Budget> budget(int id) async => Budget(await get('budgets/$id'));
+  Future<void> updateEntity(String kind, int id, Json data, String key) async {
+    await dio.put<Json>(
+      '$kind/$id',
+      data: data,
+      options: Options(headers: {'Idempotency-Key': key}),
+    );
+  }
+
   Future<int> createEntity(String kind, Json data, String key) async =>
       (await dio.post<Json>(
             kind,

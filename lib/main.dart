@@ -69,6 +69,27 @@ class _NotaEntregaAppState extends ConsumerState<NotaEntregaApp> {
           path: '/budgets/new',
           builder: (_, _) => const CreateNoteScreen(budget: true),
         ),
+        for (final kind in ['clients', 'products'])
+          GoRoute(
+            path: '/$kind/:id/edit',
+            builder: (_, state) => EntityCreateScreen(
+              kind: kind,
+              id: int.tryParse(state.pathParameters['id']!) ?? -1,
+            ),
+          ),
+        GoRoute(
+          path: '/notes/:id/edit',
+          builder: (_, state) => CreateNoteScreen(
+            id: int.tryParse(state.pathParameters['id']!) ?? -1,
+          ),
+        ),
+        GoRoute(
+          path: '/budgets/:id/edit',
+          builder: (_, state) => CreateNoteScreen(
+            budget: true,
+            id: int.tryParse(state.pathParameters['id']!) ?? -1,
+          ),
+        ),
         GoRoute(
           path: '/notes/:id',
           builder: (_, state) =>

@@ -121,4 +121,89 @@ void main() {
     await tester.pump();
     expect(find.byTooltip('Ocultar contraseña'), findsOneWidget);
   });
+  testWidgets(
+    'credenciales rechazadas vacían ambos campos y ocultan la contraseña',
+    (tester) async {
+      adapter.status = 401;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [sessionProvider.overrideWithValue(session)],
+          child: const MaterialApp(home: LoginScreen()),
+        ),
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Correo electrónico'),
+        'wrong@example.com',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Contraseña'),
+        'wrong-password',
+      );
+      await tester.tap(find.byTooltip('Mostrar contraseña'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Iniciar sesión'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextFormField>(
+              find.widgetWithText(TextFormField, 'Correo electrónico'),
+            )
+            .controller!
+            .text,
+        isEmpty,
+      );
+      expect(
+        tester
+            .widget<TextFormField>(
+              find.widgetWithText(TextFormField, 'Contraseña'),
+            )
+            .controller!
+            .text,
+        isEmpty,
+      );
+      expect(
+        find.text('Usuario o contraseña incorrectos. Vuelve a intentarlo.'),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Mostrar contraseña'), findsOneWidget);
+      expect(session.signedIn, false);
+    },
+  );
+  testWidgets(
+    'fallo de conexión no se presenta como credenciales incorrectas',
+    (tester) async {
+      adapter.status = 503;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [sessionProvider.overrideWithValue(session)],
+          child: const MaterialApp(home: LoginScreen()),
+        ),
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Correo electrónico'),
+        'user@example.com',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Contraseña'),
+        'test-password',
+      );
+      await tester.tap(find.text('Iniciar sesión'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextFormField>(
+              find.widgetWithText(TextFormField, 'Correo electrónico'),
+            )
+            .controller!
+            .text,
+        'user@example.com',
+      );
+      expect(
+        find.text(
+          'No se pudo acceder. Revisa la conexión y vuelve a intentarlo.',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 }

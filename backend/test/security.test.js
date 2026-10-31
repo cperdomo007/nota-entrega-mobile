@@ -34,13 +34,14 @@ test('all data endpoints require authentication and HTTPS',async()=>{
   const server=app.listen(0,'127.0.0.1'); await new Promise(resolve=>server.once('listening',resolve));
   const base=`http://127.0.0.1:${server.address().port}`;
   try {
-    for(const path of ['clients','products','notes','notes/1','budgets','budgets/1','dashboard','config','auth/me','users']) {
+    for(const path of ['clients','clients/1','products','products/1','notes','notes/1','budgets','budgets/1','dashboard','config','auth/me','users']) {
       const response=await fetch(`${base}/api/mobile/v1/${path}`);
       assert.equal(response.status,401,path); assert.equal(response.headers.get('cache-control'),'no-store');
     }
     assert.equal((await fetch(`${base}/api/mobile/v1/products`,{headers:{Authorization:'Bearer invalid'}})).status,401);
     for (const path of ['clients','products','notes','budgets']) {
       assert.equal((await fetch(`${base}/api/mobile/v1/${path}`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
+      assert.equal((await fetch(`${base}/api/mobile/v1/${path}/1`,{method:'PUT',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
     }
   } finally { await new Promise(resolve=>server.close(resolve)); }
   const secure=await createApp(pool); const second=secure.listen(0,'127.0.0.1');

@@ -111,6 +111,43 @@ test('MySQL authentication, rotation, permissions, shared data and atomic note i
     assert.equal(minuteRace.find(r=>r.status===201).body.noteNumber,'301020261711');
     assert.equal((await request('notes',{method:'POST',access,key,data:input})).body.id,one.body.id);
     assert.equal((await request('budgets',{method:'POST',access,key:entityKey,data:budgetInput})).body.id,budgetOne.body.id);
+    // Full replacement edits are atomic, preserve document numbers, and
+    // reject stale snapshots. All data remains in this disposable _test DB.
+    const clientBefore=(await request(`clients/${clientOne.body.id}`,{access})).body;
+    const editClient={...clientInput,name:'Edited Client',_version:clientBefore._version};
+    const editKey=token();
+    assert.equal((await request(`clients/${clientOne.body.id}`,{method:'PUT',access,key:editKey,data:editClient})).status,200);
+    assert.equal((await request(`clients/${clientOne.body.id}`,{method:'PUT',access,key:editKey,data:editClient})).status,200);
+    const stale=await request(`clients/${clientOne.body.id}`,{method:'PUT',access,key:token(),data:editClient});
+    assert.equal(stale.status,409); assert.equal(stale.body.code,'EDIT_CONFLICT');
+    assert.equal((await request(`clients/${clientOne.body.id}`,{access})).body.name,'Edited Client');
+    const productBefore=(await request(`products/${productOne.body.id}`,{access})).body;
+    assert.equal((await request(`products/${productOne.body.id}`,{method:'PUT',access,key:token(),data:{...productInput,name:'Edited Product',price:'22.50',_version:productBefore._version}})).status,200);
+    assert.equal((await request(`products/${productOne.body.id}`,{access})).body.price,'22.50');
+    const noteBefore=(await request(`notes/${one.body.id}`,{access})).body;
+    const editNote={...input,noteNumber:'NOT-A-NEW-NUMBER',observations:'Edited terms',_version:noteBefore._version,
+      lines:[{productId:product.insertId,quantity:2,unitPrice:'10.00',serials:['EDIT-A','EDIT-B']}]};
+    const noteEditKey=token();
+    assert.equal((await request(`notes/${one.body.id}`,{method:'PUT',access,key:noteEditKey,data:editNote})).status,200);
+    assert.equal((await request(`notes/${one.body.id}`,{method:'PUT',access,key:noteEditKey,data:editNote})).status,200);
+    const noteAfter=(await request(`notes/${one.body.id}`,{access})).body;
+    assert.equal(noteAfter.noteNumber,'301020261710'); assert.equal(noteAfter.subtotal,'20.00'); assert.equal(noteAfter.total,'23.20');
+    assert.deepEqual(noteAfter.lines[0].serials,['EDIT-A','EDIT-B']);
+    const [[oldSerial]]=await pool.execute('SELECT COUNT(*) AS count FROM serials WHERE serial=?',['SERIAL-'+suffix]);
+    // The other minute's note retains its own serial; the edited note does not.
+    assert.equal(oldSerial.count,1);
+    const invalidEdit={...editNote,_version:noteAfter._version,lines:[{...editNote.lines[0],serials:['DUP','DUP']}]};
+    assert.equal((await request(`notes/${one.body.id}`,{method:'PUT',access,key:token(),data:invalidEdit})).status,422);
+    assert.equal((await request(`notes/${one.body.id}`,{access})).body._version,noteAfter._version);
+    const budgetBefore=(await request(`budgets/${budgetOne.body.id}`,{access})).body;
+    const editBudget={...budgetInput,observations:'New budget terms',_version:budgetBefore._version,
+      lines:[{productId:null,description:'Manual edited service',quantity:3,unitPrice:'10.00'}]};
+    assert.equal((await request(`budgets/${budgetOne.body.id}`,{method:'PUT',access,key:token(),data:editBudget})).status,200);
+    const budgetAfter=(await request(`budgets/${budgetOne.body.id}`,{access})).body;
+    assert.equal(budgetAfter.budgetNumber,'301020261710'); assert.equal(budgetAfter.total,'34.80');
+    assert.equal(budgetAfter.lines.length,1); assert.equal(budgetAfter.lines[0].productId,null);
+    assert.equal(budgetAfter.lines[0].description,'Manual edited service');
+    assert.equal((await request('clients/2147483647',{method:'PUT',access,key:token(),data:editClient})).status,404);
     const regular=await request('users',{method:'POST',access,data:{email:`user-${suffix}@example.com`,name:'User',password,role:'user'}});
     assert.equal(regular.status,201);
     const regularLogin=(await request('auth/login',{method:'POST',data:{email:regular.body.email,password}})).body;

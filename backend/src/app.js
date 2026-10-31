@@ -6,6 +6,7 @@ import { transaction } from './db.js';
 import { credentials, digest, hashPassword, sessionValues, validToken, verifyPassword } from './security.js';
 import { loginSchema, userSchema, noteSchema, clientSchema, productSchema, budgetSchema, validateLines, toCents, toMoney } from './validation.js';
 import { documentNumber } from './document-number.js';
+import { readEntity, updateEntity } from './editing.js';
 const publicUser = user => ({ id: user.id, email: user.email, name: user.name, role: user.role });
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const tokenBody = z.object({ refreshToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict();
@@ -123,23 +124,14 @@ export async function createApp(pool, { requireHttps = true, now = () => new Dat
   });
   routes.get('/notes/next-number',(_req,res) => res.json({noteNumber:documentNumber(now())}));
   routes.get('/budgets/next-number',(_req,res) => res.json({budgetNumber:documentNumber(now())}));
-  routes.get('/notes/:id',async(req,res) => {
-    const id = z.coerce.number().int().positive().parse(req.params.id);
-    const [[note]] = await pool.execute('SELECT * FROM delivery_notes WHERE id=?',[id]);
-    if (!note) throw fail(404,'Nota no encontrada');
-    const [lines] = await pool.execute('SELECT l.*,p.name AS productName FROM note_lines l LEFT JOIN products p ON p.id=l.productId WHERE l.noteId=? ORDER BY l.id',[id]);
-    const [serials] = await pool.execute('SELECT s.lineId,s.serial FROM serials s JOIN note_lines l ON l.id=s.lineId WHERE l.noteId=? ORDER BY s.id',[id]);
-    const [[company]] = await pool.query('SELECT businessName,rif,address,phone1,phone2,email,website FROM company_config ORDER BY id LIMIT 1');
-    res.json({...note,applyIVA:!!note.applyIVA,company:company || {},companyName:company?.businessName || '',lines:lines.map(l => ({...l,serials:serials.filter(s=>s.lineId===l.id).map(s=>s.serial)}))});
-  });
-  // Budgets are read-only: amounts/descriptions come from the shared web data.
-  routes.get('/budgets/:id',async(req,res) => {
-    const id = z.coerce.number().int().positive().parse(req.params.id);
-    const [[budget]] = await pool.execute('SELECT * FROM budgets WHERE id=?',[id]);
-    if (!budget) throw fail(404,'Presupuesto no encontrado');
-    const [lines] = await pool.execute('SELECT * FROM budget_lines WHERE budgetId=? ORDER BY id',[id]);
-    const [[company]] = await pool.query('SELECT businessName,rif,address,phone1,phone2,email,website FROM company_config ORDER BY id LIMIT 1');
-    res.json({...budget,applyIVA:!!budget.applyIVA,company:company || {},lines});
+  for (const kind of ['clients','products','notes','budgets']) routes.get(`/${kind}/:id`,async(req,res)=>{
+    const id=z.coerce.number().int().positive().parse(req.params.id);
+    const entity=await transaction(pool,db=>readEntity(db,kind,id,true));
+    if (['notes','budgets'].includes(kind)) {
+      const [[company]]=await pool.query('SELECT businessName,rif,address,phone1,phone2,email,website FROM company_config ORDER BY id LIMIT 1');
+      return res.json({...entity.json,company:company||{},companyName:company?.businessName||''});
+    }
+    res.json(entity.json);
   });
   // Reuse the existing idempotency ledger without schema changes. Legacy note
   // keys stay unchanged; catalog/budget keys contain ':' (forbidden in external
@@ -163,6 +155,14 @@ export async function createApp(pool, { requireHttps = true, now = () => new Dat
       throw error;
     }
   };
+  for (const [kind,schema] of Object.entries({clients:clientSchema,products:productSchema,notes:noteSchema,budgets:budgetSchema})) {
+    routes.put(`/${kind}/:id`,async(req,res)=>{
+      const id=z.coerce.number().int().positive().parse(req.params.id);
+      const input=schema.extend({_version:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);
+      const result=await createOnce(req,`edit-${kind}-${id}`,input,db=>updateEntity(db,kind,id,input));
+      res.json(result);
+    });
+  }
   routes.post('/clients',async(req,res) => {
     const input = clientSchema.parse(req.body);
     const result = await createOnce(req,'clients',input,async db => {
@@ -233,7 +233,7 @@ export async function createApp(pool, { requireHttps = true, now = () => new Dat
   app.use((error,_req,res,_next)=>{
     const status = error instanceof z.ZodError ? 422 : error.code === 'ER_DUP_ENTRY' ? 409 :
       error.type === 'entity.too.large' ? 413 : error instanceof SyntaxError ? 400 : error.status || 500;
-    res.status(status).json({...(['DOCUMENT_NUMBER_EXISTS','CATALOG_DUPLICATE'].includes(error.publicCode) ? {code:error.publicCode} : {}),error:status===500 ? 'Error interno' : status===422 ? 'Datos inválidos' : status===409 ? 'Conflicto: revisa numeración, IVA o datos enviados' : status===401 ? 'Credenciales o sesión inválidas' : status===403 ? 'Acceso denegado' : status===404 ? 'No encontrado' : 'No se pudo completar la operación'});
+    res.status(status).json({...(['DOCUMENT_NUMBER_EXISTS','CATALOG_DUPLICATE','EDIT_CONFLICT','IVA_CHANGED','INVALID_LINES'].includes(error.publicCode) ? {code:error.publicCode} : {}),error:status===500 ? 'Error interno' : status===422 ? 'Datos inválidos' : status===409 ? 'Conflicto: revisa numeración, IVA o datos enviados' : status===401 ? 'Credenciales o sesión inválidas' : status===403 ? 'Acceso denegado' : status===404 ? 'No encontrado' : 'No se pudo completar la operación'});
   });
   return app;
 }

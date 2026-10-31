@@ -1,3 +1,13 @@
+# Validación 0.5.0+8: edición y login
+
+- `flutter analyze --no-pub`: sin incidencias. `flutter test --no-pub --coverage`: 29 pruebas aprobadas, incluidas edición de cliente/producto/nota/presupuesto, datos precargados, seriales, línea manual sin producto, número conservado y limpieza de credenciales rechazadas. Fallos de conexión conservan los campos.
+- Seis pruebas unitarias/de seguridad del backend aprobadas; GET y PUT sin sesión protegidos. Seis PDF reales verificados con pypdf, conservando formatos, seriales e importes sin códigos de producto.
+- Integración MySQL aislada preparada para edición atómica, totales, número original, eliminación de seriales reemplazados, rollback de ediciones inválidas, idempotencia y versiones obsoletas. GitHub Actions ejecuta esa integración, Docker y los APK optimizados por arquitectura: consultar el run del commit publicado para su resultado.
+
+Sin migraciones nuevas ni escrituras ficticias de prueba en producción. Pendiente comprobar formularios, teclado, cámara y compartir en dispositivo; firma de producción.
+
+## Historial de distribución
+
 # Validación 0.4.1+7: distribución optimizada
 
 La versión 0.4.0+6 con altas y creación de presupuestos pasó CI: https://github.com/cperdomo007/nota-entrega-mobile/actions/runs/41155733557 (commit 2780b84fc719ce1567ac6192f5246e926d093bab). Incluye 23 pruebas Flutter, seis del backend, integración MySQL aislada, seis PDF verificados, Docker y compilación Android debug.

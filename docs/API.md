@@ -29,13 +29,16 @@ Todas las rutas siguientes requieren `Authorization: Bearer <accessToken>`. Se c
 | POST budgets | 201 `{id,budgetNumber?}`; cabecera fiscal y líneas con descripción histórica |
 | POST clients | 201 `{id}`; name obligatorio, rif/address/phone/email/contact opcionales |
 | POST products | 201 `{id}`; name/price/unit, barcode/description/category opcionales, hasSerial y stock |
+| GET clients/:id / products/:id | Registro completo normalizado con `_version` |
+| PUT clients/:id / products/:id | Sustitución de campos editables, 200 `{id}` |
+| PUT notes/:id / budgets/:id | Edición completa transaccional, 200 `{id}`, número original conservado |
 | GET users | Solo admin; `{items:[{id,email,name,role,active}]}` paginado |
 | POST users | Solo admin; `{email,name,password,role}` → 201 usuario sin hash |
 | PATCH users/:id | Solo admin; `{active:boolean}` → 204; desactivar revoca sesiones |
 
 No se permite desactivar la propia cuenta. No hay endpoint público de registro. Para crear el primer administrador se usa el comando del servidor documentado en RAILWAY.md.
 
-`company` contiene `{businessName,rif,address,phone1,phone2,email,website}` de `company_config` para la cabecera fiscal de los PDF. No contiene credenciales SQL. Presupuestos consulta y crea en `budgets`/`budget_lines`; no hay PATCH/DELETE ni migraciones nuevas. Se conserva la descripción histórica incluso si la línea no tiene producto asociado. Los IDs siguen en JSON para relacionar datos; Flutter no los imprime como descripción ni muestra una columna de código en los PDF.
+`company` contiene `{businessName,rif,address,phone1,phone2,email,website}` de `company_config` para la cabecera fiscal de los PDF. No contiene credenciales SQL. Presupuestos consulta, crea y edita en `budgets`/`budget_lines`; no hay DELETE ni migraciones nuevas. Se conserva la descripción histórica incluso si la línea no tiene producto asociado. Los IDs siguen en JSON para relacionar datos; Flutter no los imprime como descripción ni muestra una columna de código en los PDF.
 
 Búsqueda por nombre/RIF, nombre/código y número/cliente. Limit 1–50, offset>=0, orden id descendente; comodines escapados. hasSerial/applyIVA booleanos; datos de la misma empresa compartidos para todas las cuentas activas.
 
@@ -54,5 +57,13 @@ Numeración: el servidor asigna DDMMAAAAHHMM al guardar, usando DOCUMENT_TIME_ZO
 Se reutiliza mobile_note_requests sin cambios de esquema. Claves de notas conservan el formato previo; las de catálogo/presupuesto se guardan como clients:/products:/budgets: + SHA-256 de la clave. Los dos puntos no están permitidos en claves externas, evitando colisiones entre tipos. En esos registros, la columna heredada noteId almacena el ID de la entidad creada; no tiene FK a delivery_notes. No agregar esa FK sin migrar primero el ledger a un esquema genérico. Los hashes no contienen datos de clientes en claro.
 
 Errores: 400 JSON inválido, 401 credenciales/sesión, 403 permisos, 404 ausente, 409 conflicto, 413 cuerpo grande, 422 validación, 426 HTTPS, 429 límite, 5xx error. SQL y credenciales nunca se devuelven. TLS termina en Railway; un proxy de ingreso confiable. /health solo responde disponibilidad de BD; no expone información del esquema.
+
+## Edición desde 0.5.0+8
+
+Los cuatro GET por ID incluyen `_version`: SHA-256 de los datos persistidos, líneas y seriales. Los documentos se leen en transacción para obtener un conjunto coherente. Cada PUT exige la cabecera Idempotency-Key y todos los campos del esquema de alta junto a `_version`. No se permite editar ID ni números de documento; noteNumber se acepta por compatibilidad, pero se ignora. Fechas, cliente y observaciones sí son editables. La operación bloquea la cabecera, compara la versión y modifica el conjunto dentro de una transacción. Si cambió, responde 409 EDIT_CONFLICT antes de escribir.
+
+Los PUT de notas reemplazan líneas y seriales de forma atómica; los de presupuestos conservan descripciones manuales y productId nullable. Se validan productos, cantidades, precios y seriales, y se recalculan totales con el IVA actual del servidor. Cambios de IVA entre apertura y guardado: 409 IVA_CHANGED. Líneas inválidas: 422 INVALID_LINES. RIF/código duplicado: 409 CATALOG_DUPLICATE. Un reintento confirmado devuelve el mismo ID sin duplicar líneas ni seriales.
+
+El ledger existente usa el prefijo edit-<tipo>-<id>: + hash de clave para ediciones. No se crean tablas ni columnas nuevas. La protección de versión opera en estas rutas móviles; el repositorio web conserva su implementación de edición.
 
 Despliegue autorizado: https://nota-entrega-mobile-production.up.railway.app/api/mobile/v1/ . La API es pública por HTTPS, las rutas de datos requieren sesión y API→MySQL usa red privada. No se habilitó HTTP ni conexión MySQL en Flutter.

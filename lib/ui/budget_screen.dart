@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
+import 'package:go_router/go_router.dart';
 
 import '../data/commercial_pdf.dart';
 import '../data/note_pdf.dart';
@@ -26,16 +27,32 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Detalle de presupuesto')),
+    appBar: AppBar(
+      title: const Text('Detalle de presupuesto'),
+      actions: [
+        IconButton(
+          tooltip: 'Editar presupuesto',
+          icon: const Icon(Icons.edit),
+          onPressed: () async {
+            await context.push('/budgets/${widget.id}/edit');
+            if (mounted) {
+              setState(() {
+                future = ref.read(apiProvider).budget(widget.id);
+              });
+            }
+          },
+        ),
+      ],
+    ),
     body: FutureBuilder<Budget>(
       future: future,
       builder: (_, snapshot) {
         if (snapshot.hasError) {
           return Center(
             child: TextButton(
-              onPressed: () => setState(
-                () => future = ref.read(apiProvider).budget(widget.id),
-              ),
+              onPressed: () => setState(() {
+                future = ref.read(apiProvider).budget(widget.id);
+              }),
               child: const Text('No se pudo cargar. Reintentar'),
             ),
           );

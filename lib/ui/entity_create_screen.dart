@@ -14,7 +14,8 @@ String creationKey() => List.generate(
 
 class EntityCreateScreen extends ConsumerStatefulWidget {
   final String kind;
-  const EntityCreateScreen({super.key, required this.kind});
+  final int? id;
+  const EntityCreateScreen({super.key, required this.kind, this.id});
   @override
   ConsumerState<EntityCreateScreen> createState() => _EntityCreateScreenState();
 }
@@ -23,18 +24,37 @@ class _EntityCreateScreenState extends ConsumerState<EntityCreateScreen> {
   final form = GlobalKey<FormState>();
   final fields = <String, TextEditingController>{};
   final key = creationKey();
+  Json initial = {};
+  late final Future<void> setup;
+  @override
+  void initState() {
+    super.initState();
+    setup = load();
+  }
+
+  Future<void> load() async {
+    if (widget.id != null) {
+      initial = await ref.read(apiProvider).get('${widget.kind}/${widget.id}');
+      serial = initial['hasSerial'] == true;
+      for (final entry in fields.entries) {
+        entry.value.text = valueFor(entry.key);
+      }
+    }
+  }
+
+  String valueFor(String name) =>
+      initial[name]?.toString() ??
+      (name == 'unit'
+          ? 'UN'
+          : name == 'stock'
+          ? '0'
+          : '');
   bool serial = false, busy = false;
   String? error;
   bool get product => widget.kind == 'products';
   TextEditingController field(String name) => fields.putIfAbsent(
     name,
-    () => TextEditingController(
-      text: name == 'unit'
-          ? 'UN'
-          : name == 'stock'
-          ? '0'
-          : '',
-    ),
+    () => TextEditingController(text: valueFor(name)),
   );
   String value(String name) => field(name).text.trim();
   @override
@@ -70,9 +90,17 @@ class _EntityCreateScreenState extends ConsumerState<EntityCreateScreen> {
       error = null;
     });
     try {
-      final id = await ref
-          .read(apiProvider)
-          .createEntity(widget.kind, data, key);
+      final api = ref.read(apiProvider);
+      final int id;
+      if (widget.id != null) {
+        await api.updateEntity(widget.kind, widget.id!, {
+          ...data,
+          '_version': initial['_version'],
+        }, key);
+        id = widget.id!;
+      } else {
+        id = await api.createEntity(widget.kind, data, key);
+      }
       if (mounted) Navigator.pop(context, {...data, 'id': id});
     } catch (failure) {
       if (mounted) {
@@ -140,57 +168,80 @@ class _EntityCreateScreenState extends ConsumerState<EntityCreateScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(product ? 'Nuevo producto' : 'Nuevo cliente')),
-    body: AbsorbPointer(
-      absorbing: busy,
-      child: Form(
-        key: form,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            input(
-              'name',
-              product ? 'Nombre del producto' : 'Nombre o razón social',
-              500,
-              required: true,
-            ),
-            if (product) ...[
-              input('barcode', 'Código de producto (opcional)', 255),
-              input('description', 'Descripción', 4000, lines: 3),
-              input('category', 'Categoría', 100),
-              input('price', 'Precio', 11, required: true),
-              input('unit', 'Unidad', 50, required: true),
-              input('stock', 'Existencia inicial', 10, required: true),
-              SwitchListTile(
-                title: const Text('Requiere serial por unidad'),
-                value: serial,
-                onChanged: (value) => setState(() => serial = value),
-              ),
-            ] else ...[
-              input('rif', 'RIF', 50),
-              input('address', 'Dirección', 2000, lines: 3),
-              input('phone', 'Teléfono', 20),
-              input('email', 'Correo', 255),
-              input('contact', 'Contacto', 100),
-            ],
-            if (error != null)
-              Text(
-                error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            FilledButton(
-              onPressed: busy ? null : save,
-              child: Text(
-                busy
-                    ? 'Guardando…'
-                    : product
-                    ? 'Guardar producto'
-                    : 'Guardar cliente',
-              ),
-            ),
-          ],
-        ),
+    appBar: AppBar(
+      title: Text(
+        widget.id == null
+            ? (product ? 'Nuevo producto' : 'Nuevo cliente')
+            : (product ? 'Editar producto' : 'Editar cliente'),
       ),
+    ),
+    body: FutureBuilder<void>(
+      future: setup,
+      builder: (_, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(
+            child: Text(
+              'No se pudo cargar. Vuelve al listado e inténtalo de nuevo.',
+            ),
+          );
+        }
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return AbsorbPointer(
+          absorbing: busy,
+          child: Form(
+            key: form,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                input(
+                  'name',
+                  product ? 'Nombre del producto' : 'Nombre o razón social',
+                  500,
+                  required: true,
+                ),
+                if (product) ...[
+                  input('barcode', 'Código de producto (opcional)', 255),
+                  input('description', 'Descripción', 4000, lines: 3),
+                  input('category', 'Categoría', 100),
+                  input('price', 'Precio', 11, required: true),
+                  input('unit', 'Unidad', 50, required: true),
+                  input('stock', 'Existencia inicial', 10, required: true),
+                  SwitchListTile(
+                    title: const Text('Requiere serial por unidad'),
+                    value: serial,
+                    onChanged: (value) => setState(() => serial = value),
+                  ),
+                ] else ...[
+                  input('rif', 'RIF', 50),
+                  input('address', 'Dirección', 2000, lines: 3),
+                  input('phone', 'Teléfono', 20),
+                  input('email', 'Correo', 255),
+                  input('contact', 'Contacto', 100),
+                ],
+                if (error != null)
+                  Text(
+                    error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                FilledButton(
+                  onPressed: busy ? null : save,
+                  child: Text(
+                    busy
+                        ? 'Guardando…'
+                        : product
+                        ? 'Guardar producto'
+                        : 'Guardar cliente',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     ),
   );
 }

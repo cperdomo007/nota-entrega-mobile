@@ -51,7 +51,7 @@ class _BudgetApi extends Api {
 
 void main() {
   testWidgets(
-    'busca un presupuesto web y muestra el detalle sin códigos ni acciones de edición',
+    'busca un presupuesto web y muestra el detalle sin códigos',
     (tester) async {
       final api = _BudgetApi();
       await tester.pumpWidget(
