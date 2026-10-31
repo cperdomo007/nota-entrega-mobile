@@ -11,7 +11,7 @@ La versión 0.3.0+5 adapta los PDF móviles a los dos ejemplos facilitados por e
 - Nota: observaciones a todo el ancho, totales con símbolo dólar y espacios de Entregado por/Recibido conforme.
 - Se conservan los importes persistidos; no hay conversión de moneda ni recálculo fiscal en el PDF. La fila de IVA se omite cuando applyIVA es falso.
 
-La app permite buscar, consultar y compartir los presupuestos existentes de la web. Esta versión no crea ni modifica presupuestos. Los endpoints están protegidos con la misma sesión móvil; no requieren alterar el esquema de producción.
+La app permite buscar, consultar y compartir los presupuestos existentes de la web. Desde 0.4.0+6 también crea presupuestos, con descripción editable y número DDMMAAAAHHMM asignado por el servidor al guardar. Los endpoints están protegidos con la misma sesión móvil; no requieren alterar el esquema de producción. El formato PDF y la omisión de códigos se conservan.
 
 ## Verificación
 

@@ -8,6 +8,8 @@ import 'package:printing/printing.dart';
 import '../main.dart';
 import '../data/note_pdf.dart';
 import '../data/commercial_pdf.dart';
+import '../data/api_errors.dart';
+import 'entity_create_screen.dart';
 import '../domain/models.dart';
 import 'scanner.dart';
 import 'application_branding.dart';
@@ -326,15 +328,19 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
         }[widget.kind]!,
       ),
     ),
-    floatingActionButton: widget.kind == 'notes'
-        ? FloatingActionButton(
-            onPressed: () async {
-              await context.push('/notes/new');
-              if (mounted) load(reset: true);
-            },
-            child: const Icon(Icons.add),
-          )
-        : null,
+    floatingActionButton: FloatingActionButton(
+      tooltip: {
+        'clients': 'Nuevo cliente',
+        'products': 'Nuevo producto',
+        'notes': 'Nueva nota',
+        'budgets': 'Nuevo presupuesto',
+      }[widget.kind],
+      onPressed: () async {
+        await context.push('/${widget.kind}/new');
+        if (mounted) load(reset: true);
+      },
+      child: const Icon(Icons.add),
+    ),
     body: Column(
       children: [
         Padding(
@@ -521,12 +527,14 @@ class _NoteScreenState extends ConsumerState<NoteScreen> {
 }
 
 class CreateNoteScreen extends ConsumerStatefulWidget {
-  const CreateNoteScreen({super.key});
+  final bool budget;
+  const CreateNoteScreen({super.key, this.budget = false});
   @override
   ConsumerState<CreateNoteScreen> createState() => _CreateNoteScreenState();
 }
 
 class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
+  String get kind => widget.budget ? 'budgets' : 'notes';
   final number = TextEditingController(),
       observations = TextEditingController();
   final delivered = TextEditingController(), received = TextEditingController();
@@ -549,9 +557,9 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
   Future<void> initialize() async {
     final api = ref.read(apiProvider);
     final config = await api.get('config');
-    final next = await api.get('notes/next-number');
+    final next = await api.get('$kind/next-number');
     rateBps = cents(config['ivaRate'] ?? '16.00');
-    number.text = next['noteNumber'] as String;
+    number.text = next[widget.budget ? 'budgetNumber' : 'noteNumber'] as String;
   }
 
   @override
@@ -565,10 +573,13 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
   Future<void> addLine() async {
     final raw = await pickEntity(context, ref, 'products');
     if (raw == null || !mounted) return;
-    final product = Product.fromJson(raw);
+    final product = Product.fromJson({
+      ...raw,
+      if (widget.budget) 'hasSerial': false,
+    });
     final line = await showDialog<DraftLine>(
       context: context,
-      builder: (_) => LineDialog(product: product),
+      builder: (_) => LineDialog(product: product, budget: widget.budget),
     );
     if (line != null && mounted) setState(() => lines.add(line));
   }
@@ -582,9 +593,10 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
     setState(() => busy = true);
     try {
       final c = client!;
-      final id = await ref.read(apiProvider).create({
-        'noteNumber': number.text.trim(),
-        'noteDate': date.toIso8601String().substring(0, 10),
+      final payload = <String, dynamic>{
+        (widget.budget ? 'budgetDate' : 'noteDate'): date
+            .toIso8601String()
+            .substring(0, 10),
         'clientName': c.name,
         'clientRif': c.rif,
         'clientAddress': c.address,
@@ -593,16 +605,34 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
         'applyIVA': applyIva,
         'ivaRate': money(rateBps),
         'observations': observations.text.trim(),
-        'deliveredBy': delivered.text.trim(),
-        'receivedBy': received.text.trim(),
-        'lines': lines.map((l) => l.toJson()).toList(),
-      }, key);
-      if (mounted) context.pushReplacement('/notes/$id');
-    } catch (_) {
+        if (!widget.budget) 'deliveredBy': delivered.text.trim(),
+        if (!widget.budget) 'receivedBy': received.text.trim(),
+        'lines': lines
+            .map(
+              (l) => widget.budget
+                  ? {
+                      'productId': l.product.id,
+                      'description': l.description,
+                      'quantity': l.quantity,
+                      'unitPrice': money(l.priceCents),
+                    }
+                  : l.toJson(),
+            )
+            .toList(),
+      };
+      final api = ref.read(apiProvider);
+      final id = widget.budget
+          ? await api.createEntity(kind, payload, key)
+          : await api.create(payload, key);
+      if (mounted) context.pushReplacement('/$kind/$id');
+    } catch (failure) {
       if (mounted) {
         showError(
           context,
-          'No se pudo confirmar la nota. Reintenta sin cambiar el formulario; no se enviará duplicada.',
+          saveError(
+            failure,
+            'No se pudo confirmar. Reintenta sin cambiar el formulario; no se enviará duplicado.',
+          ),
         );
       }
     } finally {
@@ -612,7 +642,9 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Nueva nota')),
+    appBar: AppBar(
+      title: Text(widget.budget ? 'Nuevo presupuesto' : 'Nueva nota'),
+    ),
     body: FutureBuilder<void>(
       future: setup,
       builder: (_, snapshot) {
@@ -638,7 +670,11 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
             children: [
               TextField(
                 controller: number,
-                decoration: const InputDecoration(labelText: 'Número de nota'),
+                readOnly: true,
+                decoration: const InputDecoration(
+                  labelText: 'Número (DDMMAAAAHHMM)',
+                  helperText: 'Vista previa. Se asigna al guardar con la hora de Venezuela.',
+                ),
               ),
               ListTile(
                 title: Text(
@@ -671,9 +707,7 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
               const Divider(),
               for (var i = 0; i < lines.length; i++)
                 ListTile(
-                  title: Text(
-                    '${lines[i].product.name} × ${lines[i].quantity}',
-                  ),
+                  title: Text('${lines[i].description} × ${lines[i].quantity}'),
                   subtitle: Text(
                     '${money(lines[i].total)} · ${lines[i].serials.join(', ')}',
                   ),
@@ -701,18 +735,26 @@ class _CreateNoteScreenState extends ConsumerState<CreateNoteScreen> {
                 maxLines: 3,
                 decoration: const InputDecoration(labelText: 'Observaciones'),
               ),
-              TextField(
-                controller: delivered,
-                decoration: const InputDecoration(labelText: 'Entregado por'),
-              ),
-              TextField(
-                controller: received,
-                decoration: const InputDecoration(labelText: 'Recibido por'),
-              ),
+              if (!widget.budget)
+                TextField(
+                  controller: delivered,
+                  decoration: const InputDecoration(labelText: 'Entregado por'),
+                ),
+              if (!widget.budget)
+                TextField(
+                  controller: received,
+                  decoration: const InputDecoration(labelText: 'Recibido por'),
+                ),
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: save,
-                child: Text(busy ? 'Guardando…' : 'Crear nota'),
+                child: Text(
+                  busy
+                      ? 'Guardando…'
+                      : widget.budget
+                      ? 'Crear presupuesto'
+                      : 'Crear nota',
+                ),
               ),
             ],
           ),
@@ -782,6 +824,19 @@ class _EntityPickerState extends ConsumerState<EntityPicker> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Seleccionar')),
+    floatingActionButton: FloatingActionButton(
+      tooltip: widget.kind == 'clients' ? 'Nuevo cliente' : 'Nuevo producto',
+      child: const Icon(Icons.add),
+      onPressed: () async {
+        final entity = await Navigator.push<Json>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => EntityCreateScreen(kind: widget.kind),
+          ),
+        );
+        if (entity != null && context.mounted) Navigator.pop(context, entity);
+      },
+    ),
     body: Column(
       children: [
         Padding(
@@ -844,7 +899,8 @@ class _EntityPickerState extends ConsumerState<EntityPicker> {
 
 class LineDialog extends StatefulWidget {
   final Product product;
-  const LineDialog({super.key, required this.product});
+  final bool budget;
+  const LineDialog({super.key, required this.product, this.budget = false});
   @override
   State<LineDialog> createState() => _LineDialogState();
 }
@@ -855,11 +911,13 @@ class _LineDialogState extends State<LineDialog> {
   late final price = TextEditingController(
     text: money(widget.product.priceCents),
   );
+  late final description = TextEditingController(text: widget.product.name);
   final serials = <String>[];
   String? error;
   @override
   void dispose() {
     quantity.dispose();
+    description.dispose();
     serial.dispose();
     price.dispose();
     super.dispose();
@@ -887,6 +945,15 @@ class _LineDialogState extends State<LineDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (widget.budget)
+              TextField(
+                controller: description,
+                maxLength: 4000,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Descripción del presupuesto',
+                ),
+              ),
             TextField(
               controller: quantity,
               keyboardType: TextInputType.number,
@@ -899,26 +966,28 @@ class _LineDialogState extends State<LineDialog> {
               ),
               decoration: const InputDecoration(labelText: 'Precio unitario'),
             ),
-            TextField(
-              controller: serial,
-              onSubmitted: addSerial,
-              decoration: InputDecoration(
-                labelText: 'Serial',
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.add),
-                  tooltip: 'Agregar serial',
-                  onPressed: () => addSerial(serial.text),
+            if (!widget.budget)
+              TextField(
+                controller: serial,
+                onSubmitted: addSerial,
+                decoration: InputDecoration(
+                  labelText: 'Serial',
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.add),
+                    tooltip: 'Agregar serial',
+                    onPressed: () => addSerial(serial.text),
+                  ),
                 ),
               ),
-            ),
-            TextButton.icon(
-              onPressed: () async {
-                final value = await scan(context);
-                if (value != null && mounted) addSerial(value);
-              },
-              icon: const Icon(Icons.qr_code_scanner),
-              label: const Text('Escanear serial'),
-            ),
+            if (!widget.budget)
+              TextButton.icon(
+                onPressed: () async {
+                  final value = await scan(context);
+                  if (value != null && mounted) addSerial(value);
+                },
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('Escanear serial'),
+              ),
             for (final value in serials.toList())
               InputChip(
                 label: Text(value),
@@ -947,7 +1016,12 @@ class _LineDialogState extends State<LineDialog> {
               q,
               cents(price.text.trim().replaceAll(',', '.')),
               serials,
+              description: widget.budget ? description.text.trim() : null,
             );
+            if (widget.budget && line.description.isEmpty) {
+              setState(() => error = 'La descripción es obligatoria');
+              return;
+            }
             final message = validateLines([line]);
             if (message != null) {
               setState(() => error = message);

@@ -1,4 +1,13 @@
-# Validación 0.3.0+5: formatos PDF
+# Validación 0.4.0+6: altas y numeración
+
+- Análisis Flutter sin incidencias; 23 pruebas aprobadas. Nuevos flujos: alta de cliente, alta de producto con control de serial, creación de presupuesto con descripción editable y número de vista previa de solo lectura.
+- Backend: seis pruebas unitarias/de seguridad aprobadas; incluyen DDMMAAAAHHMM en America/Caracas, medianoche, fin de mes, año bisiesto, validación del catálogo y bloqueo de POST sin sesión.
+- Seis PDF generados por Flutter y verificados con pypdf; formatos, seriales e importes conservados sin códigos de producto.
+- Integración MySQL 8.4 aislada preparada para altas compartidas, RIF/código únicos, claves idempotentes separadas por entidad, presupuestos sin seriales, IVA y carrera entre documentos del mismo minuto. GitHub Actions ejecuta esta integración, Docker y la compilación APK: consultar el run del commit publicado para su resultado.
+
+Sin migraciones nuevas ni renumeración del historial. Las únicas escrituras de prueba se ejecutan en la base aislada _test de CI. No se crean registros ficticios en producción. Pendientes: comprobación de formularios/teclado, cámara y compartir en un teléfono; firma release.
+
+## Historial 0.3.0+5: formatos PDF
 
 - `flutter analyze --no-pub`: sin incidencias.
 - `flutter test --no-pub --coverage`: 20 pruebas aprobadas; incluye buscar/abrir presupuestos y exportar ambas plantillas.

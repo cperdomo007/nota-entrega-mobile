@@ -66,7 +66,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Presupuestos'));
       await tester.pumpAndSettle();
-      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(find.byType(FloatingActionButton), findsOneWidget);
       await tester.enterText(find.byType(TextField), 'PRE-2');
       await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pumpAndSettle();

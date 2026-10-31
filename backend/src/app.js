@@ -4,13 +4,15 @@ import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { transaction } from './db.js';
 import { credentials, digest, hashPassword, sessionValues, validToken, verifyPassword } from './security.js';
-import { loginSchema, userSchema, noteSchema, validateLines, toCents, toMoney } from './validation.js';
+import { loginSchema, userSchema, noteSchema, clientSchema, productSchema, budgetSchema, validateLines, toCents, toMoney } from './validation.js';
+import { documentNumber } from './document-number.js';
 const publicUser = user => ({ id: user.id, email: user.email, name: user.name, role: user.role });
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const tokenBody = z.object({ refreshToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict();
 const pageSchema = z.object({ q: z.string().trim().max(200).default(''),
   limit: z.coerce.number().int().min(1).max(50).default(50), offset: z.coerce.number().int().min(0).max(10000000).default(0) });
-export async function createApp(pool, { requireHttps = true } = {}) {
+export async function createApp(pool, { requireHttps = true, now = () => new Date() } = {}) {
+  documentNumber(now()); // Validate timezone configuration before listening.
   const app = express();
   app.disable('x-powered-by');
   // Railway supplies one trusted ingress proxy. Never use trust proxy=true.
@@ -119,10 +121,8 @@ export async function createApp(pool, { requireHttps = true } = {}) {
     const [rows] = await pool.query(`SELECT ${fields} FROM ${table}${where} ORDER BY id DESC LIMIT ${limit} OFFSET ${offset}`,q ? [search,search] : []);
     res.json({items:rows.map(row => ({...row,...('hasSerial' in row ? {hasSerial:!!row.hasSerial} : {}),...('applyIVA' in row ? {applyIVA:!!row.applyIVA} : {})}))});
   });
-  routes.get('/notes/next-number',async(_req,res) => {
-    const [[row]] = await pool.query('SELECT COALESCE(MAX(id),0)+1 AS nextId FROM delivery_notes');
-    res.json({noteNumber:`NE-${String(row.nextId).padStart(6,'0')}`});
-  });
+  routes.get('/notes/next-number',(_req,res) => res.json({noteNumber:documentNumber(now())}));
+  routes.get('/budgets/next-number',(_req,res) => res.json({budgetNumber:documentNumber(now())}));
   routes.get('/notes/:id',async(req,res) => {
     const id = z.coerce.number().int().positive().parse(req.params.id);
     const [[note]] = await pool.execute('SELECT * FROM delivery_notes WHERE id=?',[id]);
@@ -141,15 +141,49 @@ export async function createApp(pool, { requireHttps = true } = {}) {
     const [[company]] = await pool.query('SELECT businessName,rif,address,phone1,phone2,email,website FROM company_config ORDER BY id LIMIT 1');
     res.json({...budget,applyIVA:!!budget.applyIVA,company:company || {},lines});
   });
+  // Reuse the existing idempotency ledger without schema changes. Legacy note
+  // keys stay unchanged; catalog/budget keys contain ':' (forbidden in external
+  // keys) and a hash. For these namespaces noteId holds the created entity ID.
+  const createOnce = async(req,kind,input,work) => {
+    const raw = z.string().regex(/^[A-Za-z0-9_-]{24,96}$/).parse(req.headers['idempotency-key']);
+    const requestKey = kind === 'notes' ? raw : `${kind}:${digest(raw)}`;
+    const payloadHash = digest(JSON.stringify(input));
+    try {
+      return await transaction(pool,async db => {
+        await db.execute('INSERT INTO mobile_note_requests (userId,requestKey,payloadHash) VALUES (?,?,?) ON DUPLICATE KEY UPDATE requestKey=requestKey',[req.user.id,requestKey,payloadHash]);
+        const [[previous]] = await db.execute('SELECT payloadHash,noteId FROM mobile_note_requests WHERE userId=? AND requestKey=? FOR UPDATE',[req.user.id,requestKey]);
+        if (previous.payloadHash !== payloadHash) throw fail(409,'La clave ya se usó con otros datos');
+        if (previous.noteId) return {id:previous.noteId};
+        const result = await work(db);
+        await db.execute('UPDATE mobile_note_requests SET noteId=? WHERE userId=? AND requestKey=?',[result.id,req.user.id,requestKey]);
+        return result;
+      });
+    } catch (error) {
+      if (error.code === 'ER_DUP_ENTRY') error.publicCode = ['notes','budgets'].includes(kind) ? 'DOCUMENT_NUMBER_EXISTS' : 'CATALOG_DUPLICATE';
+      throw error;
+    }
+  };
+  routes.post('/clients',async(req,res) => {
+    const input = clientSchema.parse(req.body);
+    const result = await createOnce(req,'clients',input,async db => {
+      const [created] = await db.execute('INSERT INTO clients (name,rif,address,phone,email,contact) VALUES (?,?,?,?,?,?)',
+        [input.name,input.rif||null,input.address||null,input.phone||null,input.email||null,input.contact||null]);
+      return {id:created.insertId};
+    });
+    res.status(201).json(result);
+  });
+  routes.post('/products',async(req,res) => {
+    const input = productSchema.parse(req.body);
+    const result = await createOnce(req,'products',input,async db => {
+      const [created] = await db.execute('INSERT INTO products (name,barcode,description,category,price,unit,hasSerial,stock) VALUES (?,?,?,?,?,?,?,?)',
+        [input.name,input.barcode||null,input.description||null,input.category||null,toMoney(toCents(input.price)),input.unit,input.hasSerial,input.stock]);
+      return {id:created.insertId};
+    });
+    res.status(201).json(result);
+  });
   routes.post('/notes',async(req,res) => {
     const input = noteSchema.parse(req.body);
-    const requestKey = z.string().regex(/^[A-Za-z0-9_-]{24,96}$/).parse(req.headers['idempotency-key']);
-    const payloadHash = digest(JSON.stringify(input));
-    const result = await transaction(pool,async db => {
-      await db.execute('INSERT INTO mobile_note_requests (userId,requestKey,payloadHash) VALUES (?,?,?) ON DUPLICATE KEY UPDATE requestKey=requestKey',[req.user.id,requestKey,payloadHash]);
-      const [[previous]] = await db.execute('SELECT payloadHash,noteId FROM mobile_note_requests WHERE userId=? AND requestKey=? FOR UPDATE',[req.user.id,requestKey]);
-      if (previous.payloadHash !== payloadHash) throw fail(409,'La clave ya se usó con otros datos');
-      if (previous.noteId) return {id:previous.noteId};
+    const result = await createOnce(req,'notes',input,async db => {
       const ids = [...new Set(input.lines.map(l=>l.productId))];
       const [products] = await db.query(`SELECT id,hasSerial FROM products WHERE id IN (${ids.map(()=>'?').join(',')})`,ids);
       if (!validateLines(input.lines,products)) throw fail(422,'Productos, importes o seriales inválidos');
@@ -160,14 +194,38 @@ export async function createApp(pool, { requireHttps = true } = {}) {
       const subtotal = input.lines.reduce((sum,l)=>sum+toCents(l.unitPrice)*l.quantity,0);
       const iva = input.applyIVA ? Math.round(subtotal*rate/100) : 0;
       if (subtotal+iva > 999999999999) throw fail(422,'Importe demasiado grande');
+      const number = documentNumber(now());
       const [created] = await db.execute('INSERT INTO delivery_notes (noteNumber,noteDate,clientName,clientRif,clientAddress,clientPhone,clientContact,subtotal,applyIVA,ivaAmount,total,observations,deliveredBy,receivedBy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [input.noteNumber,input.noteDate,input.clientName,input.clientRif||null,input.clientAddress||null,input.clientPhone||null,input.clientContact||null,toMoney(subtotal),input.applyIVA,toMoney(iva),toMoney(subtotal+iva),input.observations||null,input.deliveredBy||null,input.receivedBy||null]);
+        [number,input.noteDate,input.clientName,input.clientRif||null,input.clientAddress||null,input.clientPhone||null,input.clientContact||null,toMoney(subtotal),input.applyIVA,toMoney(iva),toMoney(subtotal+iva),input.observations||null,input.deliveredBy||null,input.receivedBy||null]);
       for (const line of input.lines) {
         const [createdLine] = await db.execute('INSERT INTO note_lines (noteId,productId,quantity,unitPrice,lineTotal) VALUES (?,?,?,?,?)',[created.insertId,line.productId,line.quantity,toMoney(toCents(line.unitPrice)),toMoney(toCents(line.unitPrice)*line.quantity)]);
         for (const serial of line.serials) await db.execute('INSERT INTO serials (lineId,serial) VALUES (?,?)',[createdLine.insertId,serial]);
       }
-      await db.execute('UPDATE mobile_note_requests SET noteId=? WHERE userId=? AND requestKey=?',[created.insertId,req.user.id,requestKey]);
-      return {id:created.insertId,noteNumber:input.noteNumber};
+      return {id:created.insertId,noteNumber:number};
+    });
+    res.status(201).json(result);
+  });
+  routes.post('/budgets',async(req,res) => {
+    const input = budgetSchema.parse(req.body);
+    const result = await createOnce(req,'budgets',input,async db => {
+      const ids = [...new Set(input.lines.map(l=>l.productId).filter(Boolean))];
+      if (ids.length) {
+        const [products] = await db.query(`SELECT id FROM products WHERE id IN (${ids.map(()=>'?').join(',')})`,ids);
+        if (products.length !== ids.length) throw fail(422,'Producto no encontrado');
+      }
+      const [[config]] = await db.query('SELECT ivaRate FROM company_config ORDER BY id LIMIT 1');
+      const rate = Number(config?.ivaRate ?? 16);
+      if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw fail(503,'Configuración fiscal inválida');
+      if (input.ivaRate !== undefined && Number(input.ivaRate) !== rate) throw fail(409,'La tasa de IVA cambió');
+      const subtotal = input.lines.reduce((sum,l)=>sum+toCents(l.unitPrice)*l.quantity,0);
+      const iva = input.applyIVA ? Math.round(subtotal*rate/100) : 0;
+      if (subtotal+iva > 999999999999) throw fail(422,'Importe demasiado grande');
+      const number = documentNumber(now());
+      const [created] = await db.execute('INSERT INTO budgets (budgetNumber,budgetDate,clientName,clientRif,clientAddress,clientPhone,clientContact,subtotal,applyIVA,ivaAmount,total,observations) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+        [number,input.budgetDate,input.clientName,input.clientRif||null,input.clientAddress||null,input.clientPhone||null,input.clientContact||null,toMoney(subtotal),input.applyIVA,toMoney(iva),toMoney(subtotal+iva),input.observations||null]);
+      for (const line of input.lines) await db.execute('INSERT INTO budget_lines (budgetId,productId,description,quantity,unitPrice,lineTotal) VALUES (?,?,?,?,?,?)',
+        [created.insertId,line.productId||null,line.description,line.quantity,toMoney(toCents(line.unitPrice)),toMoney(toCents(line.unitPrice)*line.quantity)]);
+      return {id:created.insertId,budgetNumber:number};
     });
     res.status(201).json(result);
   });
@@ -175,7 +233,7 @@ export async function createApp(pool, { requireHttps = true } = {}) {
   app.use((error,_req,res,_next)=>{
     const status = error instanceof z.ZodError ? 422 : error.code === 'ER_DUP_ENTRY' ? 409 :
       error.type === 'entity.too.large' ? 413 : error instanceof SyntaxError ? 400 : error.status || 500;
-    res.status(status).json({error:status===500 ? 'Error interno' : status===422 ? 'Datos inválidos' : status===409 ? 'Conflicto: revisa numeración, IVA o datos enviados' : status===401 ? 'Credenciales o sesión inválidas' : status===403 ? 'Acceso denegado' : status===404 ? 'No encontrado' : 'No se pudo completar la operación'});
+    res.status(status).json({...(['DOCUMENT_NUMBER_EXISTS','CATALOG_DUPLICATE'].includes(error.publicCode) ? {code:error.publicCode} : {}),error:status===500 ? 'Error interno' : status===422 ? 'Datos inválidos' : status===409 ? 'Conflicto: revisa numeración, IVA o datos enviados' : status===401 ? 'Credenciales o sesión inválidas' : status===403 ? 'Acceso denegado' : status===404 ? 'No encontrado' : 'No se pudo completar la operación'});
   });
   return app;
 }

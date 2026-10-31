@@ -59,10 +59,17 @@ class DraftLine {
   final Product product;
   final int quantity, priceCents;
   final List<String> serials;
-  DraftLine(this.product, this.quantity, this.priceCents, List<String> serials)
-    : serials = List.unmodifiable(
-        serials.map((s) => s.trim()).where((s) => s.isNotEmpty),
-      );
+  final String description;
+  DraftLine(
+    this.product,
+    this.quantity,
+    this.priceCents,
+    List<String> serials, {
+    String? description,
+  }) : description = description ?? product.name,
+       serials = List.unmodifiable(
+         serials.map((s) => s.trim()).where((s) => s.isNotEmpty),
+       );
   int get total => quantity * priceCents;
   Json toJson() => {
     'productId': product.id,

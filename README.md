@@ -22,13 +22,15 @@ Las sesiones usan access tokens aleatorios de 15 minutos en memoria, refresh tok
 ## Funcionalidades
 
 - Inicio de sesión con correo/contraseña y recuperación de sesión.
-- Dashboard, clientes y productos con búsqueda/paginación.
+- Dashboard, clientes y productos con búsqueda/paginación y alta desde el listado o el selector de un documento.
 - Listado, creación y detalle de notas; seriales manuales y cámara.
-- Consulta y búsqueda de presupuestos existentes en la web; detalle y PDF compartido. Sin creación ni edición de presupuestos desde el móvil.
+- Consulta, búsqueda y creación de presupuestos con descripción editable, detalle y PDF compartido. Sin edición ni eliminación de documentos existentes.
 - PDF A4 de Presupuesto y Nota de Entrega según los formatos facilitados, con logo, datos fiscales, cliente, observaciones y totales; firmas en notas. Sin códigos de producto en las líneas, conservando los seriales. Fuentes incluidas y soporte multipágina. Ver [formatos PDF](docs/PDF_FORMATS.md).
 - API: creación/desactivación de usuarios solo por administradores; cuentas desactivadas pierden acceso y sesiones.
 
 Todos los usuarios activos pertenecen a la misma empresa y comparten su catálogo y notas; no hay aislamiento multiempresa. Los totales definitivos se calculan en el servidor según el IVA configurado. El precio unitario es editable por usuarios autorizados a crear notas, como en la web. No se agrega descuento automático de stock.
+
+Desde 0.4.0+6, notas y presupuestos reciben al guardar un número DDMMAAAAHHMM con la hora de Venezuela (por ejemplo, 301020261710). No se utiliza MAX(id), NE- ni un contador. La vista previa no reserva el número. Si ya existe un documento del mismo tipo en ese minuto, se informa un conflicto y se debe esperar al minuto siguiente; un reintento de la misma operación confirmada recupera su ID. No se renumeran documentos existentes. DOCUMENT_TIME_ZONE, solo en el servidor, usa America/Caracas por defecto.
 
 ## Pruebas y compilación
 

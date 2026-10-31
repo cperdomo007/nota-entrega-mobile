@@ -6,6 +6,7 @@ import 'core/session.dart';
 import 'data/api.dart';
 import 'ui/screens.dart';
 import 'ui/budget_screen.dart';
+import 'ui/entity_create_screen.dart';
 
 final sessionProvider = Provider<Session>((ref) => throw UnimplementedError());
 final apiProvider = Provider<Api>((ref) {
@@ -58,6 +59,15 @@ class _NotaEntregaAppState extends ConsumerState<NotaEntregaApp> {
         GoRoute(
           path: '/notes/new',
           builder: (_, _) => const CreateNoteScreen(),
+        ),
+        for (final kind in ['clients', 'products'])
+          GoRoute(
+            path: '/$kind/new',
+            builder: (_, _) => EntityCreateScreen(kind: kind),
+          ),
+        GoRoute(
+          path: '/budgets/new',
+          builder: (_, _) => const CreateNoteScreen(budget: true),
         ),
         GoRoute(
           path: '/notes/:id',
