@@ -135,7 +135,7 @@ export async function createApp(pool, { requireHttps = true, now = () => new Dat
   });
   // Reuse the existing idempotency ledger without schema changes. Legacy note
   // keys stay unchanged; catalog/budget keys contain ':' (forbidden in external
-  // keys) and a hash. For these namespaces noteId holds the created entity ID.
+  // keys) and a hash. For create/edit namespaces noteId holds the affected entity ID.
   const createOnce = async(req,kind,input,work) => {
     const raw = z.string().regex(/^[A-Za-z0-9_-]{24,96}$/).parse(req.headers['idempotency-key']);
     const requestKey = kind === 'notes' ? raw : `${kind}:${digest(raw)}`;
