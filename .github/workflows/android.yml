@@ -1,0 +1,110 @@
+name: Android
+on:
+  push:
+    branches: [main, feature/flutter-initial-setup]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  analyze-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter analyze
+      - run: flutter test --coverage
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install pypdf==6.10.0
+      - run: python tool/verify_pdf.py
+      - run: flutter build apk --release --split-per-abi --dart-define-from-file=config/env.production.json
+      - run: python tool/apk_report.py
+      - name: Verify installable signatures
+        shell: bash
+        run: |
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
+          test -n "$signer"
+          for apk in build/app/outputs/flutter-apk/*-release.apk; do
+            "$signer" verify "$apk"
+            test "$(apkanalyzer manifest debuggable "$apk")" = "false"
+            apkanalyzer manifest permissions "$apk" | grep -q android.permission.INTERNET
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nota-entrega-optimized-arm64
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nota-entrega-optimized-arm32
+          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nota-entrega-optimized-x86_64
+          path: build/app/outputs/flutter-apk/app-x86_64-release.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-size-report
+          path: build/app/outputs/flutter-apk/apk-sizes.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/lcov.info
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdf-format-previews
+          path: |
+            build/pdf-preview/nota-entrega.pdf
+            build/pdf-preview/presupuesto.pdf
+          if-no-files-found: error
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: test-only-password
+          MYSQL_DATABASE: mobile_api_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:integration
+        env:
+          TEST_DATABASE_URL: mysql://root:test-only-password@127.0.0.1:3306/mobile_api_test
+      - run: docker build -t nota-entrega-api:test .

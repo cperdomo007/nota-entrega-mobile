@@ -1,0 +1,23 @@
+{
+  "name": "nota-entrega-mobile-api",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "migrate": "node src/manage.js migrate",
+    "create-user": "node src/manage.js create-user",
+    "test": "node --test test/*.test.js",
+    "test:integration": "node --test test/integration.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "mysql2": "^3.15.0",
+    "zod": "^4.1.12"
+  }
+}

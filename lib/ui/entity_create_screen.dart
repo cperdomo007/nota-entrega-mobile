@@ -1,0 +1,279 @@
+import 'dart:math';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../data/api_errors.dart';
+import '../domain/models.dart';
+import '../main.dart';
+import 'rif_scan.dart';
+
+String creationKey() => List.generate(
+  24,
+  (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'),
+).join();
+
+class EntityCreateScreen extends ConsumerStatefulWidget {
+  final String kind;
+  final int? id;
+  const EntityCreateScreen({super.key, required this.kind, this.id});
+  @override
+  ConsumerState<EntityCreateScreen> createState() => _EntityCreateScreenState();
+}
+
+class _EntityCreateScreenState extends ConsumerState<EntityCreateScreen> {
+  final form = GlobalKey<FormState>();
+  final fields = <String, TextEditingController>{};
+  final key = creationKey();
+  Json initial = {};
+  late final Future<void> setup;
+  @override
+  void initState() {
+    super.initState();
+    setup = load();
+  }
+
+  Future<void> load() async {
+    if (widget.id != null) {
+      initial = await ref.read(apiProvider).get('${widget.kind}/${widget.id}');
+      serial = initial['hasSerial'] == true;
+      for (final entry in fields.entries) {
+        entry.value.text = valueFor(entry.key);
+      }
+    }
+  }
+
+  String valueFor(String name) =>
+      initial[name]?.toString() ??
+      (name == 'unit'
+          ? 'UN'
+          : name == 'stock'
+          ? '0'
+          : '');
+  bool serial = false, busy = false, scanning = false;
+  String? error;
+  bool get product => widget.kind == 'products';
+  TextEditingController field(String name) => fields.putIfAbsent(
+    name,
+    () => TextEditingController(text: valueFor(name)),
+  );
+  String value(String name) => field(name).text.trim();
+  Future<void> scanRif() async {
+    setState(() => scanning = true);
+    try {
+      final result = await readRif(context);
+      if (!mounted || result == null) return;
+      setState(() {
+        if (result.rif.isNotEmpty) field('rif').text = result.rif;
+        if (result.name.isNotEmpty) field('name').text = result.name;
+        if (result.address.isNotEmpty) field('address').text = result.address;
+      });
+    } finally {
+      if (mounted) setState(() => scanning = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in fields.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> save() async {
+    if (!form.currentState!.validate()) return;
+    final data = <String, dynamic>{
+      'name': value('name'),
+      if (product) ...{
+        'barcode': value('barcode'),
+        'description': value('description'),
+        'category': value('category'),
+        'price': money(cents(value('price').replaceAll(',', '.'))),
+        'unit': value('unit'),
+        'stock': int.parse(value('stock')),
+        'hasSerial': serial,
+      } else ...{
+        'rif': value('rif'),
+        'address': value('address'),
+        'phone': value('phone'),
+        'email': value('email'),
+        'contact': value('contact'),
+      },
+    };
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      final api = ref.read(apiProvider);
+      final int id;
+      if (widget.id != null) {
+        await api.updateEntity(widget.kind, widget.id!, {
+          ...data,
+          '_version': initial['_version'],
+        }, key);
+        id = widget.id!;
+      } else {
+        id = await api.createEntity(widget.kind, data, key);
+      }
+      if (mounted) Navigator.pop(context, {...data, 'id': id});
+    } catch (failure) {
+      if (mounted) {
+        setState(
+          () => error = saveError(
+            failure,
+            'No se pudo confirmar. Reintenta sin cambiar los datos; no se enviará duplicado.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Widget input(
+    String name,
+    String label,
+    int max, {
+    bool required = false,
+    int lines = 1,
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: TextFormField(
+      controller: field(name),
+      maxLength: max,
+      maxLines: lines,
+      keyboardType: ['price', 'stock'].contains(name)
+          ? const TextInputType.numberWithOptions(decimal: true)
+          : name == 'email'
+          ? TextInputType.emailAddress
+          : TextInputType.text,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+      validator: (raw) {
+        final text = raw?.trim() ?? '';
+        if (required && text.isEmpty) return 'Campo obligatorio';
+        if (name == 'price') {
+          try {
+            final amount = cents(text.replaceAll(',', '.'));
+            if (amount <= 0 || amount > 9999999999) {
+              return 'Precio mayor que cero, máximo 99999999.99';
+            }
+          } catch (_) {
+            return 'Precio inválido; máximo dos decimales';
+          }
+        }
+        if (name == 'stock' &&
+            (int.tryParse(text) == null ||
+                int.parse(text) < 0 ||
+                int.parse(text) > 2147483647)) {
+          return 'Existencia entera no negativa';
+        }
+        if (name == 'email' &&
+            text.isNotEmpty &&
+            !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(text)) {
+          return 'Correo inválido';
+        }
+        return null;
+      },
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: Text(
+        widget.id == null
+            ? (product ? 'Nuevo producto' : 'Nuevo cliente')
+            : (product ? 'Editar producto' : 'Editar cliente'),
+      ),
+    ),
+    body: FutureBuilder<void>(
+      future: setup,
+      builder: (_, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(
+            child: Text(
+              'No se pudo cargar. Vuelve al listado e inténtalo de nuevo.',
+            ),
+          );
+        }
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return AbsorbPointer(
+          absorbing: busy || scanning,
+          child: Form(
+            key: form,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (!product) ...[
+                  OutlinedButton.icon(
+                    onPressed: scanning ? null : scanRif,
+                    icon: scanning
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.document_scanner_outlined),
+                    label: Text(
+                      scanning ? 'Leyendo documento…' : 'Leer datos desde RIF',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                input(
+                  'name',
+                  product ? 'Nombre del producto' : 'Nombre o razón social',
+                  500,
+                  required: true,
+                ),
+                if (product) ...[
+                  input('barcode', 'Código de producto (opcional)', 255),
+                  input('description', 'Descripción', 4000, lines: 3),
+                  input('category', 'Categoría', 100),
+                  input('price', 'Precio', 11, required: true),
+                  input('unit', 'Unidad', 50, required: true),
+                  input('stock', 'Existencia inicial', 10, required: true),
+                  SwitchListTile(
+                    title: const Text('Requiere serial por unidad'),
+                    value: serial,
+                    onChanged: (value) => setState(() => serial = value),
+                  ),
+                ] else ...[
+                  input('rif', 'RIF', 50),
+                  input('address', 'Dirección', 2000, lines: 3),
+                  input('phone', 'Teléfono', 20),
+                  input('email', 'Correo', 255),
+                  input('contact', 'Contacto', 100),
+                ],
+                if (error != null)
+                  Text(
+                    error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                FilledButton(
+                  onPressed: busy ? null : save,
+                  child: Text(
+                    busy
+                        ? 'Guardando…'
+                        : product
+                        ? 'Guardar producto'
+                        : 'Guardar cliente',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
