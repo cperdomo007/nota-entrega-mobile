@@ -61,3 +61,7 @@ CI ejecuta `flutter build apk --release --split-per-abi --dart-define-from-file=
 Estos APK son instalables y optimizados para pruebas, firmados con la clave debug del runner; no representan una firma de producción ni se publican en Play Store. La identidad de esa clave puede cambiar entre ejecuciones de CI, como en los APK debug anteriores. La firma de producción requiere configuración aparte.
 
 `tool/apk_report.py` verifica una única ABI, código AOT y ausencia del kernel debug en cada archivo, mide los bytes reales y publica `apk-size-report` y una tabla en el resumen de CI. CI verifica además las firmas, que debuggable=false y el permiso INTERNET en los APK finales. No afirmar tamaño ni compilación exitosa hasta verificar el run correspondiente.
+
+## Tasas de cambio y calculadora
+
+El panel integra BCV y USDT Binance P2P (+ Bs 6,00) y conversión bidireccional con precisión decimal. Ver docs/EXCHANGE_RATES.md para fuentes, API, caché, metodología, validación y compilación. Requiere desplegar el backend actualizado e instalar un APK nuevo.

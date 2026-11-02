@@ -1,3 +1,5 @@
+import 'exchange_rates.dart';
+
 import 'dart:math';
 
 import 'package:dio/dio.dart';
@@ -271,6 +273,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           icon: const Icon(Icons.add),
           label: const Text('Crear nota de entrega'),
         ),
+        const SizedBox(height: 20),
+        const ExchangeRatesSection(),
       ],
     ),
   );

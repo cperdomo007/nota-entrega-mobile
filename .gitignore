@@ -16,3 +16,5 @@ key.properties
 node_modules/
 .env.*
 !.env.example
+
+backend/.cache/

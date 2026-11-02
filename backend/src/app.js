@@ -1,3 +1,4 @@
+import {createExchangeRateService} from './exchange-rates.js';
 import express from 'express';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
@@ -12,7 +13,7 @@ const fail = (status, message) => Object.assign(new Error(message), { status });
 const tokenBody = z.object({ refreshToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict();
 const pageSchema = z.object({ q: z.string().trim().max(200).default(''),
   limit: z.coerce.number().int().min(1).max(50).default(50), offset: z.coerce.number().int().min(0).max(10000000).default(0) });
-export async function createApp(pool, { requireHttps = true, now = () => new Date() } = {}) {
+export async function createApp(pool, { requireHttps = true, now = () => new Date(), exchangeRates = createExchangeRateService() } = {}) {
   documentNumber(now()); // Validate timezone configuration before listening.
   const app = express();
   app.disable('x-powered-by');
@@ -76,6 +77,7 @@ export async function createApp(pool, { requireHttps = true, now = () => new Dat
     if (!users[0]) throw fail(401,'Sesión expirada');
     req.user = users[0]; next();
   });
+  routes.get('/exchange-rates',async(_req,res)=>res.json(await exchangeRates.get()));
   routes.get('/auth/me',(req,res) => res.json({user:publicUser(req.user)}));
   routes.post('/users',async(req,res) => {
     if (req.user.role !== 'admin') throw fail(403,'Solo administradores');

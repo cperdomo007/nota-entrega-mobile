@@ -34,7 +34,7 @@ test('all data endpoints require authentication and HTTPS',async()=>{
   const server=app.listen(0,'127.0.0.1'); await new Promise(resolve=>server.once('listening',resolve));
   const base=`http://127.0.0.1:${server.address().port}`;
   try {
-    for(const path of ['clients','clients/1','products','products/1','notes','notes/1','budgets','budgets/1','dashboard','config','auth/me','users']) {
+    for(const path of ['clients','clients/1','products','products/1','notes','notes/1','budgets','budgets/1','dashboard','exchange-rates','config','auth/me','users']) {
       const response=await fetch(`${base}/api/mobile/v1/${path}`);
       assert.equal(response.status,401,path); assert.equal(response.headers.get('cache-control'),'no-store');
     }
